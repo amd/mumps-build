@@ -19,6 +19,11 @@
 #define JOB_END -2
 #define USE_COMM_WORLD -987654
 
+#define INIT_ERROR_CHECK
+#define ANALYSE_ERROR_CHECK
+#define FACT_ERROR_CHECK
+#define SOLUTION_ERROR_CHECK
+//#define TERMINATE_ERROR_CHECK
 
 int main(int argc, char ** argv)
 {
@@ -30,7 +35,8 @@ int main(int argc, char ** argv)
   double a[2];
   double rhs[2];
 
-  MUMPS_INT myid, ierr;
+  MUMPS_INT ierr;
+  int myid, p;
 
   ierr = MPI_Init(&argc, &argv);
   if (ierr != 0) {
@@ -38,15 +44,35 @@ int main(int argc, char ** argv)
      return 1;
   }
   ierr = MPI_Comm_rank(MPI_COMM_WORLD, &myid);
+  MPI_Comm_size(MPI_COMM_WORLD, &p);     /* get number of processes */
   /* Define A and rhs */
   rhs[0]=1.0;rhs[1]=4.0;
   a[0]=1.0;a[1]=2.0;
 
+    MPI_Errhandler_set(MPI_COMM_WORLD, MPI_ERRORS_RETURN); /* return info about
+      errors */
+    printf("No of Processes = %d, My Rank = %d\n", p, myid);
   /* Initialize a MUMPS instance. Use MPI_COMM_WORLD */
   id.comm_fortran=USE_COMM_WORLD;
   id.par=1; id.sym=0;
   id.job=JOB_INIT;
+  printf("Start Mumps Init\n");
+  fflush(stdout);
   dmumps_c(&id);
+#ifdef INIT_ERROR_CHECK
+  if (id.infog[0] < 0)
+  {
+      printf("[PROC %d] Error Return in Test application, id.infog[0] = %d\n", myid, id.infog[0]);
+      fflush(stdout);
+      printf("[PROC %d] Error Return in Test application, id.infog[1] = %d\n", myid, id.infog[1]);
+      fflush(stdout);
+      printf("[PROC %d] id.infog[2] = %d\n", myid, id.infog[2]);
+      fflush(stdout);
+      return 1;
+  }
+#endif
+  printf("Done Mumps Init, infog[0] = %d\n", id.infog[0]);
+  fflush(stdout);
 
   /* Define the problem on the host */
   if (myid == 0) {
@@ -58,17 +84,94 @@ int main(int argc, char ** argv)
   id.ICNTL(1)=-1; id.ICNTL(2)=-1; id.ICNTL(3)=-1; id.ICNTL(4)=0;
 
   /* Call the MUMPS package (analyse, factorization and solve). */
-  id.job=6;
+  id.job=1;
+  printf("Start Mumps Analyse\n");
+  fflush(stdout);
+  //printf("sizeof(int) = %d\n", sizeof(MUMPS_INT));
+  //fflush(stdout);
   dmumps_c(&id);
+#ifdef ANALYSE_ERROR_CHECK
+  if (id.infog[0] < 0)
+  {
+      printf("[PROC %d] [Analyse] Error Return in Test application, id.infog[0] = %d\n", myid, id.infog[0]);
+      fflush(stdout);
+      printf("[PROC %d] [Analyse] Error Return in Test application, id.infog[1] = %d\n", myid, id.infog[1]);
+      fflush(stdout);
+      printf("[PROC %d] [Analyse] id.infog[2] = %d\n", myid, id.infog[2]);
+      fflush(stdout);
+      return 1;
+  }
+#endif
+  printf("Done Mumps Analyse, infog[0] = %d\n", id.infog[0]);
+  fflush(stdout);
+
+  id.job = 2;
+  printf("Start Mumps Fact\n");
+  fflush(stdout);
+  dmumps_c(&id);
+#ifdef FACT_ERROR_CHECK
+  if (id.infog[0] < 0)
+  {
+      printf("[PROC %d] [Factorize] Error Return in Test application, id.infog[0] = %d\n", myid, id.infog[0]);
+      fflush(stdout);
+      printf("[PROC %d] [Factorize] Error Return in Test application, id.infog[1] = %d\n", myid, id.infog[1]);
+      fflush(stdout);
+      printf("[PROC %d] [Factorize] id.infog[2] = %d\n", myid, id.infog[2]);
+      fflush(stdout);
+      return 1;
+  }
+#endif
+  printf("Done Mumps Fact, infog[0] = %d\n", id.infog[0]);
+  fflush(stdout);
+
+  id.job = 3;
+  printf("Start Mumps Solve\n");
+  fflush(stdout);
+  dmumps_c(&id);
+#ifdef SOLUTION_ERROR_CHECK
+  if (id.infog[0] < 0)
+  {
+      printf("[PROC %d] [Solution] Error Return in Test application, id.infog[0] = %d\n", myid, id.infog[0]);
+      fflush(stdout);
+      printf("[PROC %d] [Solution] Error Return in Test application, id.infog[1] = %d\n", myid, id.infog[1]);
+      fflush(stdout);
+      printf("[PROC %d] [Solution] id.infog[2] = %d\n", myid, id.infog[2]);
+      fflush(stdout);
+      return 1;
+  }
+#endif
+  printf("Done Mumps Solve, infog[0] = %d\n", id.infog[0]);
+  fflush(stdout);
+
+  //printf("Done Mumps Analyse/Fact/Solve\n");
+  //fflush(stdout);
+  /*
   if (id.infog[0]<0) {
     fprintf(stderr," (PROC %d) ERROR RETURN: \tINFOG(1)= %d\n\t\t\t\tINFOG(2)= %d\n",
         myid, id.infog[0], id.infog[1]);
     return 1;
   }
-
+  */
   /* Terminate instance. */
   id.job=JOB_END;
+  printf("Start Mumps Termination\n");
+  fflush(stdout);
   dmumps_c(&id);
+#ifdef TERMINATE_ERROR_CHECK
+  if (id.infog[0] < 0)
+  {
+      printf("[PROC %d] Error Return in Test application, id.infog[0] = %d\n", myid, id.infog[0]);
+      fflush(stdout);
+      printf("[PROC %d] Error Return in Test application, id.infog[1] = %d\n", myid, id.infog[1]);
+      fflush(stdout);
+      printf("[PROC %d] id.infog[2] = %d\n", myid, id.infog[2]);
+      fflush(stdout);
+      return 1;
+  }
+#endif
+  printf("Done Mumps Termination, infog[0] = %d\n", id.infog[0]);
+  fflush(stdout);
+
   if (myid == 0) printf("Solution is : (%8.2f  %8.2f)\n", rhs[0],rhs[1]);
   ierr = MPI_Finalize();
   return 0;

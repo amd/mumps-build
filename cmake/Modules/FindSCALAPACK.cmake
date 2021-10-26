@@ -142,13 +142,41 @@ set(SCALAPACK_INCLUDE_DIR ${SCALAPACK_INCLUDE_DIR} PARENT_SCOPE)
 
 endfunction(scalapack_mkl)
 
+#===============================
+function(scalapack_aocl)
+# AOCL: Include AOCL's Scalapack library
+
+find_library(SCALAPACK_LIBRARY
+  NAMES scalapack
+  HINTS ${CMAKE_SOURCE_DIR}/lib/)
+
+message(STATUS "SCALAPACK_LIBRARY = ${SCALAPACK_LIBRARY}")
+
+if(NOT (SCALAPACK_LIBRARY))
+  return()
+endif()
+
+set(SCALAPACK_AoclLibs_FOUND true PARENT_SCOPE)
+
+list(APPEND SCALAPACK_LIBRARY ${CMAKE_THREAD_LIBS_INIT})
+
+set(SCALAPACK_LIBRARY ${SCALAPACK_LIBRARY} PARENT_SCOPE)
+set(SCALAPACK_INCLUDE_DIR ${SCALAPACK_INCLUDE_DIR} PARENT_SCOPE)
+message(STATUS "End of AOCL Scalapack Linking")
+endfunction(scalapack_aocl)
+
+
 # === main
 
-if(NOT MKL IN_LIST SCALAPACK_FIND_COMPONENTS AND DEFINED ENV{MKLROOT})
+if(ENABLE_MKL)
   list(APPEND SCALAPACK_FIND_COMPONENTS MKL)
+  if(intsize64)
+      list(APPEND SCALAPACK_FIND_COMPONENTS MKL64)
+  endif(intsize64)
 endif()
 
 if(MKL IN_LIST SCALAPACK_FIND_COMPONENTS)
+  message(STATUS "MKL defined")
   # we have to sanitize MKLROOT if it has Windows backslashes (\) otherwise it will break at build time
   # double-quotes are necessary per CMake to_cmake_path docs.
   file(TO_CMAKE_PATH "$ENV{MKLROOT}" MKLROOT)
@@ -161,7 +189,11 @@ if(MKL IN_LIST SCALAPACK_FIND_COMPONENTS)
 
   # find MKL MPI binding
   if(WIN32)
-    scalapack_mkl(mkl_scalapack_${_mkl_bitflag}lp64 mkl_blacs_intelmpi_${_mkl_bitflag}lp64)
+    if(BUILD_SHARED_LIBS)
+      scalapack_mkl(mkl_scalapack_${_mkl_bitflag}lp64_dll mkl_blacs_${_mkl_bitflag}lp64_dll)
+    else()
+      scalapack_mkl(mkl_scalapack_${_mkl_bitflag}lp64 mkl_blacs_intelmpi_${_mkl_bitflag}lp64)
+    endif()
   elseif(APPLE)
     scalapack_mkl(mkl_scalapack_${_mkl_bitflag}lp64 mkl_blacs_mpich_${_mkl_bitflag}lp64)
   else()
@@ -174,26 +206,11 @@ if(MKL IN_LIST SCALAPACK_FIND_COMPONENTS)
 
 else()
 
-  find_package(PkgConfig)
-
-  pkg_search_module(pc_scalapack scalapack scalapack-openmpi scalapack-mpich)
-
   find_library(SCALAPACK_LIBRARY
-    NAMES scalapack scalapack-openmpi scalapack-mpich
+    NAMES scalapack
     NAMES_PER_DIR
-    HINTS ${pc_scalapack_LIBRARY_DIRS} ${pc_scalapack_LIBDIR}
-    PATH_SUFFIXES openmpi/lib mpich/lib
+    HINTS ${USER_PROVIDED_SCALAPACK_LIBRARY_PATH}    
   )
-
-  # some systems have libblacs as a separate file, instead of being subsumed in libscalapack.
-  cmake_path(GET SCALAPACK_LIBRARY PARENT_PATH BLACS_ROOT)
-
-  find_library(BLACS_LIBRARY
-    NAMES blacs
-    NO_DEFAULT_PATH
-    HINTS ${BLACS_ROOT}
-  )
-
 endif()
 
 # --- Check that Scalapack links
@@ -212,9 +229,6 @@ find_package_handle_standard_args(SCALAPACK
 if(SCALAPACK_FOUND)
 # need if _FOUND guard to allow project to autobuild; can't overwrite imported target even if bad
 set(SCALAPACK_LIBRARIES ${SCALAPACK_LIBRARY})
-if(BLACS_LIBRARY)
-  list(APPEND SCALAPACK_LIBRARIES ${BLACS_LIBRARY})
-endif()
 set(SCALAPACK_INCLUDE_DIRS ${SCALAPACK_INCLUDE_DIR})
 
 if(NOT TARGET SCALAPACK::SCALAPACK)

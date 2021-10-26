@@ -7,14 +7,14 @@ option(dev "developer mode")
 option(parallel "parallel or sequential (non-MPI, non-Scalapack)" ON)
 option(intsize64 "use 64-bit integers in C and Fortran" OFF)
 
-option(scotch "use Scotch" OFF)
-option(openmp "use OpenMP" OFF)
+option(scotch "use Scotch" ON)
+option(openmp "use OpenMP" ON)
 
 # --- other options
 
 # default build all
 if(NOT DEFINED arith)
-  set(arith "s;d")
+  set(arith "d")
 endif()
 
 if(intsize64)

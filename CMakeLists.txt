@@ -9,7 +9,7 @@ file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/VERSION PROJECT_VERSION
   REGEX "^([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)" LIMIT_INPUT 16 LENGTH_MAXIMUM 16 LIMIT_COUNT 1)
 
 project(MUMPS
-LANGUAGES C Fortran
+LANGUAGES C CXX Fortran
 VERSION ${PROJECT_VERSION}
 DESCRIPTION "Sparse direct parallel solver"
 HOMEPAGE_URL "http://mumps-solver.org/"
@@ -33,6 +33,8 @@ if(MSVC AND BUILD_SHARED_LIBS)
   cmake -DBUILD_SHARED_LIBS=off")
 endif()
 
+set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS true)
+
 # --- user options
 include(cmake/options.cmake)
 include(cmake/libraries.cmake)
@@ -48,18 +50,26 @@ include(cmake/get_mumps.cmake)
 # --- dependencies
 find_package(Threads)
 
-include(cmake/lapack.cmake)
+#include(cmake/lapack.cmake)
+include(cmake/Modules/FindLAPACK.cmake)
+
+if(intsize64)
+   add_definitions("-DInt=__int64" "-Dintsize64" "-DUInt=unsigned __int64" "-i8")
+else(intsize64)
+   add_definitions("-DUInt=unsigned int")
+ENDIF(intsize64)
 
 # -- Scalapack / MPI
 
 if(parallel)
   find_package(MPI COMPONENTS C Fortran REQUIRED)
-  include(cmake/scalapack.cmake)
+  #include(cmake/scalapack.cmake)
+  include(cmake/Modules/FindSCALAPACK.cmake)
 
   set(NUMERIC_LIBS SCALAPACK::SCALAPACK LAPACK::LAPACK MPI::MPI_Fortran MPI::MPI_C)
   if(openmp)
     find_package(OpenMP COMPONENTS C Fortran REQUIRED)
-    list(APPEND NUMERIC_LIBS OpenMP::OpenMP_Fortran OpenMP::OpenMP_C)
+    #list(APPEND NUMERIC_LIBS OpenMP::OpenMP_Fortran OpenMP::OpenMP_C)
   endif()
 else(parallel)
   configure_file(libseq/CMakeLists.txt ${mumps_SOURCE_DIR}/libseq/ COPYONLY)
@@ -73,30 +83,34 @@ list(APPEND NUMERIC_LIBS LAPACK::LAPACK ${CMAKE_THREAD_LIBS_INIT})
 set(ORDERING_LIBS)
 set(ORDERING_FLAGS -Dpord)
 if(scotch)
-  find_package(Scotch COMPONENTS ESMUMPS REQUIRED)
-  list(APPEND ORDERING_FLAGS -Dscotch)
-  list(APPEND ORDERING_LIBS Scotch::Scotch)
+  #find_package(Scotch COMPONENTS ESMUMPS REQUIRED)
+  #list(APPEND ORDERING_FLAGS -Dscotch)
+  #list(APPEND ORDERING_LIBS Scotch::Scotch)
   # Scotch and METIS go together
-  find_package(METIS REQUIRED)
+  #find_package(METIS REQUIRED)
+  include(cmake/Modules/FindMETIS.cmake)
   list(APPEND ORDERING_FLAGS -Dmetis)
   list(APPEND ORDERING_LIBS METIS::METIS)
 endif()
 list(APPEND ORDERING_LIBS pord)
 
-install(FILES
-  ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules/FindLAPACK.cmake
-  ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules/FindSCALAPACK.cmake
-  ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules/FindMETIS.cmake
-  ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules/FindScotch.cmake
-  ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules/FindMUMPS.cmake
-  DESTINATION lib/cmake/${PROJECT_NAME}/Modules)
+#install(FILES
+#  ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules/FindLAPACK.cmake
+#  ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules/FindSCALAPACK.cmake
+#  ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules/FindMETIS.cmake
+#  ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules/FindScotch.cmake
+#  ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules/FindMUMPS.cmake
+#  DESTINATION lib/cmake/${PROJECT_NAME}/Modules)
 
+message(STATUS "ORDERING_FLAGS = ${ORDERING_FLAGS}")
+message(STATUS "ORDERING_LIBS = ${ORDERING_LIBS}")
+message(STATUS "End of Linking Ordering Lib(PORD)")
 
 # --- MUMPS build
+message(STATUS "mumps_SOURCE_DIR = ${mumps_SOURCE_DIR}")
 
-configure_file(PORD/CMakeLists.txt ${mumps_SOURCE_DIR}/PORD/ COPYONLY)
 configure_file(PORD/lib/CMakeLists.txt ${mumps_SOURCE_DIR}/PORD/lib/ COPYONLY)
-add_subdirectory(${mumps_SOURCE_DIR}/PORD ${mumps_BINARY_DIR}/PORD)
+add_subdirectory(${mumps_SOURCE_DIR}/PORD/lib ${mumps_BINARY_DIR}/PORD/lib)
 
 configure_file(src/CMakeLists.txt ${mumps_SOURCE_DIR}/src/ COPYONLY)
 add_subdirectory(${mumps_SOURCE_DIR}/src ${mumps_BINARY_DIR}/src)
@@ -105,10 +119,23 @@ add_subdirectory(${mumps_SOURCE_DIR}/src ${mumps_BINARY_DIR}/src)
 if(BUILD_TESTING)
   add_subdirectory(tests)
 
-  configure_file(examples/CMakeLists.txt ${mumps_SOURCE_DIR}/examples/ COPYONLY)
-  add_subdirectory(${mumps_SOURCE_DIR}/examples ${mumps_BINARY_DIR}/examples)
+  #configure_file(examples/CMakeLists.txt ${mumps_SOURCE_DIR}/examples/ COPYONLY)
+  #add_subdirectory(${mumps_SOURCE_DIR}/examples ${mumps_BINARY_DIR}/examples)
 endif()
 
+
+IF (WIN32)
+  message(STATUS "OS: WIN32 system")
+ENDIF()
+if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
+    MESSAGE("Compiler: Clang")
+elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+    MESSAGE("Compiler: GNU")
+elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Intel")
+    MESSAGE("Compiler: Intel")
+elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
+    MESSAGE("Compiler: MSVC")
+endif()
 
 # --- feature summary
 

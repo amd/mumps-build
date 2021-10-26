@@ -1,129 +1,82 @@
 # MUMPS sparse solver
 
-![ci_build](https://github.com/scivision/mumps-cmake/workflows/ci_build/badge.svg)
-![ci](https://github.com/scivision/mumps-cmake/workflows/ci/badge.svg)
-![ci_mac](https://github.com/scivision/mumps-cmake/workflows/ci_mac/badge.svg)
-![ci_windows](https://github.com/scivision/mumps-cmake/workflows/ci_windows/badge.svg)
-[![intel-oneapi](https://github.com/gemini3d/gemini3d/actions/workflows/intel-oneapi.yml/badge.svg)](https://github.com/gemini3d/gemini3d/actions/workflows/intel-oneapi.yml)
-
-CMake downloads the source tarfile from MUMPS developer websites and builds in parallel.
-CMake builds MUMPS in parallel **10x faster** than the Makefiles.
-CMake allows easy reuse of MUMPS in external projects via CMake
-[FetchContent](https://github.com/scivision/mumps-fetchcontent) or ExternalProject or `cmake --install`.
-
-Many compilers and systems are supported by CMake build system on Windows, MacOS and Linux.
-Static (default) or Shared `cmake -DBUILD_SHARED_LIBS=on` MUMPS builds are supported.
-Please open a GitHub Issue if you have a problem building Mumps with CMake.
-
-Platforms known to work with MUMPS and CMake include:
-
-* Windows (use -G Ninja or -G "MinGW Makefiles")
-  * MSYS2 (GCC)
-  * Windows Subsystem for Linux (GCC)
-  * Intel oneAPI
-* MacOS
-  * GCC (Homebrew)
-  * Intel oneAPI
-* Linux
-  * GCC
-  * Intel oneAPI
-  * NVIDIA HPC SDK
-
-## Build
-
-After "git clone" this repo:
-
-```sh
-cmake -B build
-cmake --build build
-```
-
-For Windows in general (including with Intel compiler) we suggest using Ninja:
-
-```sh
-cmake -G Ninja -B build
-```
-
-or GNU Make:
-
-```sh
-cmake -G "MinGW Makefiles" -B build
-```
-
-## Usage
-
-To use MUMPS as via CMake ExternalProject do like in [mumps.cmake](https://github.com/gemini3d/gemini3d/blob/main/cmake/ext_libs/mumps.cmake).
-
-then link to your project target `foo` via `target_link_libraries(foo MUMPS::MUMPS)`
-
-Numerous build options are available as in the following sections. Most users can just use the defaults.
-
-**autobuild prereqs**
-The `-Dautobuild=true` CMake default will download and build a local copy of Lapack and/or Scalapack if missing or broken.
-
-**MPI / non-MPI**
-For systems where MPI, BLACS and SCALAPACK are not available, or where non-parallel execution is suitable, the default parallel can be disabled at CMake configure time by option -Dparallel=false.
-
-Precision: The default precision is "s;d" covering float64 and float32.
-The build-time parameter:
-
-```sh
-cmake -Darith="s;d"
-```
-
-may be optionally specified:
-
-```
--Darith=s  # real32
--Darith=d  # real64
--Darith=c  # complex64
--Darith=z  # complex128
-```
-
-More than one precision may be specified simultaneously like:
-
-```sh
-cmake "-Darith=s;d"
-```
-
-### ordering
-
-To use Scotch and METIS:
-
-```sh
-cmake -B build -Dscotch=true
-```
-
-If 64-bit integers are needed, use:
-
-```sh
-cmake -B build -Dintsize64=true
-```
-
-Note that intsize64 is only known to work with GCC at this time.
-Intel oneMKL with GCC does not work, nor does Intel oneAPI compilers.
-
-### OpenMP
-
-OpenMP can make MUMPS slower in certain situations. Try with and without OpenMP to see which is faster for your situation. Default is OpenMP OFF.
-
--Dopenmp=true / false
-
-Install
-Installing avoids having to build MUMPS repeatedly in external projects. Set environment variable MUMPS_ROOT= path to your MUMPS install to find this MUMPS.
+We avoid distributing extracted MUMPS sources ourselves--instead CMake will download the tarfile and extract, then we inject the CMakeLists.txt and build.
 
 CMake:
 
-```sh
-cmake -B build -DCMAKE_INSTALL_PREFIX=~/mylibs/mumps/
-```
+* builds MUMPS in parallel 10x faster than the Makefiles
+* allows easy reuse of MUMPS in external projects via CMake FetchContent
 
-other
-To fully specify prerequisite library locations add options like:
+## Prerequisites
+1. Cmake and Ninja Makefile Generator. Make sure Ninja is installed/updated in the Microsoft Visual Studio installation folder @ "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja"
+	a. Latest Ninja Binary at https://github.com/ninja-build/ninja/releases/download/v1.10.2/ninja-win.zip
+1. Intel OneAPI toolkit, should include C, C++, Fortran Compilers, MPI, MKL libraries (refer https://software.intel.com/content/www/us/en/develop/articles/oneapi-standalone-components.html#vtune)
+2. Prebuilt AOCL libraries for Blis, Libflame and Scalapack
+3. If reordering library is chosen to be Metis, Prebuilt Metis Library from SuiteSparse public repo (https://github.com/group-gu/SuiteSparse.git). Build Metis library separately from metis folder. 
+	a. cd SuiteSparse\metis-5.1.0
+	b. Define IDXTYPEWIDTH and REALTYPEWIDTH to 32/64 based on integer size required in metis/include/metis.h
+	c. Configure 
+		cmake S . -B ninja_build_dir -G "Ninja" -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON
+	d. Build the project		
+		cmake --build ninja_build_dir --verbose	
+	3. Library metis.lib should be generated at ninja_build_dir\lib
+5. Boost libraries on windows
+	a. Required to read mtx files efficiently and quickly
+	b. Needed for aocl_amd.cpp test application that links to Mumps libraries and measure performance for a SPD .mtx file	
+	c. Download sources and bootstrap as instructed in https://www.boost.org/doc/libs/1_55_0/more/getting_started/windows.html	
+	d. Define BOOST_ROOT in tests/CMakeLists.txt
 
----
+## Build
+1. Open Intel oneAPI command prompt for Intel 64 for Visual Studio 2019 from Windows Search box
+2. Edit default options in options.cmake in mumps/cmake/
+3. Remove any build directory if already exists
+4. Configure paths to libs/dlls
+4. Configure Mumps Project using Ninja:
+	
+	cmake S . -B ninja_build_dir -G "Ninja" -DENABLE_AOCL=ON -DENABLE_MKL=OFF -DBUILD_TESTING=ON -DCMAKE_INSTALL_PREFIX="</mumps/install/path>" -Dscotch=ON -Dopenmp=ON -DBUILD_SHARED_LIBS=OFF -Dparallel=ON -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -DCMAKE_BUILD_TYPE=Release -DUSER_PROVIDED_BLIS_LIBRARY_PATH="<path/to/blis/library/path>" -DUSER_PROVIDED_BLIS_INCLUDE_PATH="<path/to/blis/headers/path>" -DUSER_PROVIDED_LAPACK_LIBRARY_PATH="<path/to/libflame/library/path>" -DUSER_PROVIDED_LAPACK_INCLUDE_PATH="<path/to/libflame/headers/path>" -DUSER_PROVIDED_SCALAPACK_LIBRARY_PATH="<path/to/scalapack/library/path>" -DUSER_PROVIDED_METIS_LIBRARY_PATH="<path/to/metis/library/path>" -DUSER_PROVIDED_METIS_INCLUDE_PATH="<path/to/metis/include/path>" -DCMAKE_C_COMPILER="C:/Program Files (x86)/Intel/oneAPI/compiler/2021.3.0/windows/bin/intel64/icl.exe" -DCMAKE_CXX_COMPILER="C:/Program Files (x86)/Intel/oneAPI/compiler/2021.3.0/windows/bin/intel64/icl.exe" -DCMAKE_Fortran_COMPILER="C:/Program Files (x86)/Intel/oneAPI/compiler/2021.3.0/windows/bin/intel64/ifort.exe" -DBOOST_ROOT="<path/to/boost_1_77_0>" -Dintsize64=OFF
+	
+	Following options are enabled in the command:
+	-DENABLE_AOCL=ON 															<Enable AOCL Libraries>
+	-DENABLE_MKL=OFF 															<Enable MKL Libraries>
+	-DBUILD_TESTING=ON															<Enable Mumps linking to test application to test>
+	-Dscotch=ON 																<Enable Metis Library for Reordering>
+	-Dopenmp=ON 																<Enable Multithreading using openmp>
+	-Dintsize64=OFF 															<Enable LP64 i.e., 32 bit integer size>
+	-DBUILD_SHARED_LIBS=OFF 													<Enable Static Library>
+	-Dparallel=ON 																<Enable Multithreading>
+	-DCMAKE_VERBOSE_MAKEFILE:BOOL=ON 											<Enable verbose build log>
+	-DCMAKE_BUILD_TYPE=Release 													<Enable Release build>
+	-DUSER_PROVIDED_BLIS_LIBRARY_PATH=“<path/to/blis/lib/path>”					<path to AOCL built Blis library>
+	-DUSER_PROVIDED_BLIS_INCLUDE_PATH=“<path/to/blis/include/header>”			<path to AOCL Blis's Include header>
+	-DUSER_PROVIDED_LAPACK_LIBRARY_PATH=“<path/to/libflame/lib/path>”			<path to AOCL built Libflame library>
+	-DUSER_PROVIDED_LAPACK_INCLUDE_PATH=“<path/to/libflame/include/header>”		<path to AOCL Libflame's Include header>
+	-DUSER_PROVIDED_SCALAPACK_LIBRARY_PATH=“<path/to/scalapack/lib/path>”		<path to AOCL built Scalapack library>	
+	-DUSER_PROVIDED_METIS_LIBRARY_PATH=“<path/to/metis/lib>”					<path to Metis library>
+	-DUSER_PROVIDED_METIS_INCLUDE_PATH=“<path/to/metis/header>”					<path to Metis Include header>
+	-DCMAKE_C_COMPILER=“<path/to/intel c compiler>”								<path to Intel C Compiler>
+	-DCMAKE_Fortran_COMPILER=“<path/to/intel fortran compiler>”					<path to Intel Fortran Compiler>
+	-DBOOST_ROOT=“<path/to/BOOST/INSTALLATION>”									<path to Boost libraries/headers>
+	
+5. 	Toggle/Edit above options to get
+	1. Debug or Release build
+	2. LP64 or ILP64 libs
+	3. AOCL or MKL Libs
+	
+6. Build the project
+		
+	cmake --build ninja_build_dir --verbose
+	
+7. Run the executable at ninja_build_dir\tests
+	
+	mpiexec -n 2 --map-by L3cache --bind-to core Csimple.exe
+	mpiexec -n 2 --map-by L3cache --bind-to core amd_mumps_aocl sample.mtx
 
-Instead of compiling, one may install precompiled libraries by:
+## Limitation
+1. ILP64 (or -Dintsize64=ON) is not supported
 
-Ubuntu: `apt install libmumps-dev`
-CentOS: `yum install MUMPS-openmpi`
+## Note
+1. Cmake Build system will download latest Mumps tar ball and proceed with configuration and build generation
+2. Currently Metis Reordering tested. Disabling the option "-Dscotch=OFF" would enable Mumps's internal reordering. Set the appropriate init parameter before calling MUMPS API in the linking test code
+	
+		
+	

@@ -241,15 +241,71 @@ set(LAPACK_INCLUDE_DIR ${LAPACK_INCLUDE_DIR} PARENT_SCOPE)
 endfunction(openblas_libs)
 
 #===============================
+function(aocl_libs)
+# AOCL: Include LAPACK(LibFlame) and dependent (Blis) Libraries
+message(STATUS "start of finding LibFlame Library")
+find_library(LAPACK_LIBRARY
+  NAMES AOCL-LibFLAME-Win
+  HINTS ${USER_PROVIDED_LAPACK_LIBRARY_PATH})
+message(STATUS "End of finding LibFlame Library: ${LAPACK_LIBRARY}")
+if(NOT LAPACK_LIBRARY)
+  message(FATAL_ERROR "LibFlame library not found")
+endif()
+
+message(STATUS "start of finding Blis Library")
+find_library(BLAS_LIBRARY
+  NAMES AOCL-LibBlis-Win-MT-dll
+  HINTS ${USER_PROVIDED_BLIS_LIBRARY_PATH})
+message(STATUS "End of finding Blis Library: ${BLAS_LIBRARY}")
+if(NOT BLAS_LIBRARY)
+  message(FATAL_ERROR "Blis library not found")
+endif()
+
+message(STATUS "start of finding Includes path to Blis and Libflame")
+find_path(LAPACK_INCLUDE_DIR
+  NAMES FLAME.h
+  HINTS ${USER_PROVIDED_LAPACK_INCLUDE_PATH})
+
+find_path(BLAS_INCLUDE_DIR
+  NAMES blis.h
+  HINTS ${USER_PROVIDED_BLIS_INCLUDE_PATH})
+
+list(APPEND LAPACK_INCLUDE_DIR ${BLAS_INCLUDE_DIR})
+
+message(STATUS "End of finding Includes path to Blis and Libflame: ${LAPACK_INCLUDE_DIR}")
+if(NOT LAPACK_INCLUDE_DIR)
+  message(FATAL_ERROR "Includes path to Blis and Libflame not found")
+endif()
+
+if(NOT (LAPACK_LIBRARY AND BLAS_LIBRARY))
+  message(FATAL_ERROR "Blis, Libflame not found")
+  return()
+endif()
+
+list(APPEND LAPACK_LIBRARY ${BLAS_LIBRARY})
+set(LAPACK_AoclLibs_FOUND true PARENT_SCOPE)
+
+list(APPEND LAPACK_LIBRARY ${CMAKE_THREAD_LIBS_INIT})
+
+set(LAPACK_LIBRARY ${LAPACK_LIBRARY} PARENT_SCOPE)
+set(LAPACK_INCLUDE_DIR ${LAPACK_INCLUDE_DIR} PARENT_SCOPE)
+
+endfunction(aocl_libs)
+
+#===============================
 
 function(find_mkl_libs)
 # https://software.intel.com/en-us/articles/intel-mkl-link-line-advisor
 
 set(_mkl_libs ${ARGV})
 if((UNIX AND NOT APPLE) AND CMAKE_Fortran_COMPILER_ID STREQUAL GNU)
-  list(INSERT _mkl_libs 0 mkl_gf_${_mkl_bitflag}lp64)
+  list(PREPEND _mkl_libs mkl_gf_${_mkl_bitflag}lp64)
 else()
-  list(INSERT _mkl_libs 0 mkl_intel_${_mkl_bitflag}lp64)
+  if(WIN32 AND BUILD_SHARED_LIBS)
+    list(PREPEND _mkl_libs mkl_intel_${_mkl_bitflag}lp64_dll)
+  else()
+    list(PREPEND _mkl_libs mkl_intel_${_mkl_bitflag}lp64)
+  endif()
 endif()
 
 foreach(s ${_mkl_libs})
@@ -286,14 +342,20 @@ endfunction(find_mkl_libs)
 
 # ========== main program
 
+message(STATUS "Find Lapack Main(): components = ${LAPACK_FIND_COMPONENTS}")
 if(NOT (OpenBLAS IN_LIST LAPACK_FIND_COMPONENTS
   OR Netlib IN_LIST LAPACK_FIND_COMPONENTS
   OR Atlas IN_LIST LAPACK_FIND_COMPONENTS
+  OR AoclLibs IN_LIST LAPACK_FIND_COMPONENTS
   OR MKL IN_LIST LAPACK_FIND_COMPONENTS))
-  if(DEFINED ENV{MKLROOT})
+  if(ENABLE_MKL)
+    message(STATUS "MKLROOT ENV defined")
     list(APPEND LAPACK_FIND_COMPONENTS MKL)
+  if(intsize64)
+      list(APPEND LAPACK_FIND_COMPONENTS MKL64)
+  endif(intsize64)
   else()
-    list(APPEND LAPACK_FIND_COMPONENTS Netlib)
+    list(APPEND LAPACK_FIND_COMPONENTS AoclLibs)
   endif()
 endif()
 
@@ -343,10 +405,18 @@ if(MKL IN_LIST LAPACK_FIND_COMPONENTS)
     if(WIN32)
       set(_mp libiomp5md)
     endif()
-    list(APPEND _mkl_libs mkl_intel_thread mkl_core ${_mp})
+    if(WIN32 AND BUILD_SHARED_LIBS)
+      list(APPEND _mkl_libs mkl_intel_thread_dll mkl_core_dll ${_mp})
+    else()
+      list(APPEND _mkl_libs mkl_intel_thread mkl_core ${_mp})
+    endif()
   else()
     pkg_check_modules(pc_mkl mkl-${_mkltype}-${_mkl_bitflag}lp64-seq)
-    list(APPEND _mkl_libs mkl_sequential mkl_core)
+    if(WIN32 AND BUILD_SHARED_LIBS)
+      list(APPEND _mkl_libs mkl_sequential_dll mkl_core_dll)
+    else()
+      list(APPEND _mkl_libs mkl_sequential mkl_core)
+    endif()
   endif()
 
   find_mkl_libs(${_mkl_libs})
@@ -384,13 +454,18 @@ elseif(OpenBLAS IN_LIST LAPACK_FIND_COMPONENTS)
 
   openblas_libs()
 
+elseif(AoclLibs IN_LIST LAPACK_FIND_COMPONENTS)
+
+  aocl_libs()
+
 endif()
 
 # -- verify library works
 
 function(lapack_check)
-
+message(STATUS "Start of Lapack Check function")
 get_property(enabled_langs GLOBAL PROPERTY ENABLED_LANGUAGES)
+message(STATUS "enabled_langs = ${enabled_langs}")
 if(NOT Fortran IN_LIST enabled_langs)
   set(LAPACK_links true PARENT_SCOPE)
   return()
@@ -408,6 +483,9 @@ foreach(i s d)
   external :: ${i}isnan
   end program" LAPACK_${i}_links)
 
+  message(STATUS "i = ${i}")
+  message(STATUS "LAPACK_s_links = ${LAPACK_s_links}")
+  message(STATUS "LAPACK_d_links = ${LAPACK_d_links}")
   if(LAPACK_${i}_links)
     set(LAPACK_${i}_FOUND true PARENT_SCOPE)
     set(LAPACK_links true)
@@ -416,7 +494,8 @@ foreach(i s d)
 endforeach()
 
 set(LAPACK_links ${LAPACK_links} PARENT_SCOPE)
-
+message(STATUS "after lapack check func LAPACK_links = ${LAPACK_links}")
+message(STATUS "End of Lapack Check function")
 endfunction(lapack_check)
 
 # --- Check that Scalapack links
@@ -427,14 +506,19 @@ endif()
 
 
 include(FindPackageHandleStandardArgs)
+message(STATUS "Start of Finding Package Handler")
+message(STATUS "LAPACK_LIBRARY = ${LAPACK_LIBRARY}")
+message(STATUS "LAPACK_links = ${LAPACK_links}")
 find_package_handle_standard_args(LAPACK
   REQUIRED_VARS LAPACK_LIBRARY LAPACK_links
   HANDLE_COMPONENTS)
+message(STATUS "End of Finding Package Handler: ${LAPACK_FOUND}")
 
 set(BLAS_LIBRARIES ${BLAS_LIBRARY})
 set(LAPACK_LIBRARIES ${LAPACK_LIBRARY})
 set(LAPACK_INCLUDE_DIRS ${LAPACK_INCLUDE_DIR})
 
+message(STATUS "Status of Lapack Found Variable: ${LAPACK_FOUND}")
 if(LAPACK_FOUND)
 # need if _FOUND guard to allow project to autobuild; can't overwrite imported target even if bad
   if(NOT TARGET BLAS::BLAS)
