@@ -71,8 +71,8 @@ CMake:
 	mpiexec -n 2 --map-by L3cache --bind-to core Csimple.exe
 	mpiexec -n 2 --map-by L3cache --bind-to core amd_mumps_aocl sample.mtx
 
-## Limitation
-1. ILP64 (or -Dintsize64=ON) is not supported
+Limitations
+1. ILP64 (or -Dintsize64=ON) is not supported. 
 
 ## Note
 1. Cmake Build system will download latest Mumps tar ball and proceed with configuration and build generation
