@@ -32,7 +32,7 @@ $<$<VERSION_GREATER_EQUAL:${MUMPS_UPSTREAM_VERSION},4.9>:mumps_size.c>
 "$<$<VERSION_GREATER_EQUAL:${MUMPS_UPSTREAM_VERSION},5.2>:mumps_config_file_C.c;mumps_thread_affinity.c;sol_common.F>"
 $<$<VERSION_GREATER_EQUAL:${MUMPS_UPSTREAM_VERSION},5.3>:ana_blk.F>
 $<$<VERSION_GREATER_EQUAL:${MUMPS_UPSTREAM_VERSION},5.4>:mumps_register_thread.c>
-mumps_common.c mumps_io.c mumps_io_basic.c mumps_io_thread.c mumps_io_err.c
+mumps_common.c mumps_io_basic.c mumps_io_thread.c mumps_io_err.c mumps_io.c
 "$<$<AND:$<BOOL:${scotch}>,$<VERSION_GREATER_EQUAL:${MUMPS_UPSTREAM_VERSION},5.1>>:mumps_scotch.c;mumps_scotch64.c;mumps_scotch_int.c;mumps_metis.c;mumps_metis64.c;mumps_metis_int.c>"
 )
 
@@ -42,11 +42,8 @@ file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/include)
 
 add_library(mumps_common ${COMM_SRC} ${COMM_OTHER_SRC})
 target_link_libraries(mumps_common PRIVATE ${ORDERING_LIBS} ${NUMERIC_LIBS})
-target_include_directories(mumps_common
-PRIVATE ${mumps_SOURCE_DIR}/include
-INTERFACE
-$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
-$<BUILD_INTERFACE:${mumps_SOURCE_DIR}/include>
+target_include_directories(mumps_common PUBLIC
+"$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR};${mumps_SOURCE_DIR}/include>"
 $<INSTALL_INTERFACE:include>
 )
 target_compile_definitions(mumps_common PRIVATE ${ORDERING_FLAGS})
@@ -61,7 +58,7 @@ EXPORT_NAME COMMON
 VERSION ${MUMPS_VERSION}
 )
 
-install(TARGETS mumps_common EXPORT ${PROJECT_NAME}Targets)
+install(TARGETS mumps_common EXPORT ${PROJECT_NAME}-targets)
 
 # -- Mumps
 set(_ifc_libs)
@@ -118,11 +115,10 @@ target_compile_definitions(${a}mumps PRIVATE MUMPS_ARITH=MUMPS_ARITH_${a} ${ORDE
 # if(WIN32)
 #   target_compile_definitions(${a}mumps PRIVATE MUMPS_WIN32)
 # endif()
-target_include_directories(${a}mumps PRIVATE ${mumps_SOURCE_DIR}/include
-  INTERFACE
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
-  $<BUILD_INTERFACE:${mumps_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>)
+target_include_directories(${a}mumps PUBLIC
+$<BUILD_INTERFACE:${mumps_SOURCE_DIR}/include>
+$<INSTALL_INTERFACE:include>
+)
 target_link_libraries(${a}mumps PRIVATE mumps_common ${ORDERING_LIBS} ${NUMERIC_LIBS})
 
 string(TOUPPER ${a} aup)
@@ -134,7 +130,7 @@ set_target_properties(${a}mumps PROPERTIES
   EXPORT_NAME ${aup}MUMPS
   VERSION ${MUMPS_VERSION})
 
-install(TARGETS ${a}mumps EXPORT ${PROJECT_NAME}Targets)
+install(TARGETS ${a}mumps EXPORT ${PROJECT_NAME}-targets)
 
 install(FILES
   ${mumps_SOURCE_DIR}/include/${a}mumps_c.h
@@ -152,7 +148,7 @@ TYPE INCLUDE
 )
 
 # We do not need the .mod files due to the way MUMPS is interfaced
-# install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/include/ DESTINATION include)
+# install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/include/ TYPE INCLUDE)
 
 # --- MUMPS::MUMPS exported target
 # MUMPS::MUMPS is the target most users will link to.
@@ -163,7 +159,7 @@ target_link_libraries(MUMPS INTERFACE ${_ifc_libs} mumps_common pord
 $<$<NOT:$<BOOL:${parallel}>>:mpiseq>
 )
 
-install(TARGETS MUMPS EXPORT ${PROJECT_NAME}Targets)
+install(TARGETS MUMPS EXPORT ${PROJECT_NAME}-targets)
 
 # target for FetchContent
 # this must NOT be an ALIAS or linking in other packages breaks.
