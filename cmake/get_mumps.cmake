@@ -39,13 +39,15 @@ endif()
 FetchContent_Declare(mumps
 URL ${mumps_urls}
 URL_HASH SHA256=${mumps_sha256}
-SOURCE_DIR ${PROJECT_SOURCE_DIR}/cache/MUMPS-${MUMPS_UPSTREAM_VERSION}-src
-SUBBUILD_DIR ${PROJECT_SOURCE_DIR}/cache/MUMPS-${MUMPS_UPSTREAM_VERSION}-subbuild
 INACTIVITY_TIMEOUT 15
 )
 
 if(NOT mumps_POPULATED)
   FetchContent_Populate(mumps)
+endif()
+
+if(MUMPS_UPSTREAM_VERSION VERSION_EQUAL 5.4.0 OR MUMPS_UPSTREAM_VERSION VERSION_EQUAL 5.4.1)
+  include(${CMAKE_CURRENT_LIST_DIR}/mumps_patch.cmake)
 endif()
 
 # --- dynamic shared library

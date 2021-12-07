@@ -20,49 +20,23 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-option(autobuild "auto-build Lapack and/or Scalapack if missing or broken" true)
+# patching MUMPS 5.4.0, 5.4.1 mumps_io.h
 
-option(dev "developer mode")
-option(parallel "parallel or sequential (non-MPI, non-Scalapack)" ON)
-option(intsize64 "use 64-bit integers in C and Fortran" OFF)
-
-option(scotch "use Scotch" ON)
-option(openmp "use OpenMP" ON)
-
-# --- other options
-
-# default build all
-if(NOT DEFINED arith)
-  set(arith "d")
+if(mumps_patched)
+  return()
 endif()
 
-if(intsize64)
-  add_compile_definitions(INTSIZE64
-  $<$<COMPILE_LANG_AND_ID:Fortran,Intel,IntelLLVM>:WORKAROUNDINTELILP64MPI2INTEGER>
-  )
-endif()
+set(mumps_orig ${mumps_SOURCE_DIR}/src/mumps_io.h)
+set(mumps_patch_file ${CMAKE_CURRENT_LIST_DIR}/mumps_io.h)
 
-set(CMAKE_EXPORT_COMPILE_COMMANDS on)
+# TBD: WSL not present as part of Intel OneAPI command line. So native fix of scivision patch
+# application using WSL does not work. So the mumps_io.h file with the fix is copied into 
+# sources after the MUMPS package download
+# Once this fix moves to upstream and available through mumps_xxxx.tgz tarball, then the below copy of fixed file can be removed
+# <IMPORTANT> Any other changes in mumps_io.h need to be updated inside this file before copy
+configure_file(
+  ${mumps_patch_file}
+  ${mumps_orig} @ONLY)
 
-set(CMAKE_TLS_VERIFY true)
-
-
-if(dev)
-
-else()
-  set(FETCHCONTENT_UPDATES_DISCONNECTED_MUMPS true)
-  set_directory_properties(PROPERTIES EP_UPDATE_DISCONNECTED true)
-endif()
-
-
-if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-  # will not take effect without FORCE
-  # CMAKE_BINARY_DIR for use from FetchContent
-  set(CMAKE_INSTALL_PREFIX ${CMAKE_BINARY_DIR} CACHE PATH "Install top-level directory" FORCE)
-endif()
-
-
-# --- auto-ignore build directory
-if(NOT EXISTS ${PROJECT_BINARY_DIR}/.gitignore)
-  file(WRITE ${PROJECT_BINARY_DIR}/.gitignore "*")
-endif()
+set(mumps_patched true CACHE BOOL "MUMPS mumps_io.h is patched")
+message(STATUS "MUMPS mumps_io.h is patched: ${mumps_patched}")

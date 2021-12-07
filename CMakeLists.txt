@@ -1,3 +1,25 @@
+# MIT License
+#  
+# Copyright (c) <2021> Advanced Micro Devices, Inc. All rights reserved
+#  
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#  
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#  
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
+
 cmake_minimum_required(VERSION 3.20...3.22)
 
 get_property(is_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
@@ -9,7 +31,7 @@ file(READ ${CMAKE_CURRENT_LIST_DIR}/codemeta.json _j)
 string(JSON PROJECT_VERSION GET ${_j} version)
 
 project(MUMPS
-LANGUAGES C Fortran
+LANGUAGES C CXX Fortran
 VERSION ${PROJECT_VERSION}
 DESCRIPTION "Sparse direct parallel solver"
 HOMEPAGE_URL "http://mumps-solver.org/"
@@ -50,18 +72,23 @@ include(cmake/get_mumps.cmake)
 # --- dependencies
 find_package(Threads)
 
-include(cmake/lapack.cmake)
+include(cmake/Modules/FindLAPACK.cmake)
+
+if(intsize64)
+   add_definitions("-DInt=__int64" "-Dintsize64" "-DUInt=unsigned __int64" "-i8")
+else(intsize64)
+   add_definitions("-DUInt=unsigned int")
+ENDIF(intsize64)
 
 # -- Scalapack / MPI
 
 if(parallel)
   find_package(MPI COMPONENTS C Fortran REQUIRED)
-  include(cmake/scalapack.cmake)
+  include(cmake/Modules/FindSCALAPACK.cmake)
 
   set(NUMERIC_LIBS SCALAPACK::SCALAPACK LAPACK::LAPACK MPI::MPI_Fortran MPI::MPI_C)
   if(openmp)
     find_package(OpenMP COMPONENTS C Fortran REQUIRED)
-    list(APPEND NUMERIC_LIBS OpenMP::OpenMP_Fortran OpenMP::OpenMP_C)
   endif()
 else(parallel)
   configure_file(libseq/CMakeLists.txt ${mumps_SOURCE_DIR}/libseq/ COPYONLY)
@@ -75,27 +102,18 @@ list(APPEND NUMERIC_LIBS LAPACK::LAPACK ${CMAKE_THREAD_LIBS_INIT})
 set(ORDERING_LIBS)
 set(ORDERING_FLAGS -Dpord)
 if(scotch)
-  find_package(Scotch COMPONENTS ESMUMPS REQUIRED)
-  list(APPEND ORDERING_FLAGS -Dscotch)
-  list(APPEND ORDERING_LIBS Scotch::Scotch)
-  # Scotch and METIS go together
-  find_package(METIS REQUIRED)
+  include(cmake/Modules/FindMETIS.cmake)
   list(APPEND ORDERING_FLAGS -Dmetis)
   list(APPEND ORDERING_LIBS METIS::METIS)
 endif()
 list(APPEND ORDERING_LIBS pord)
 
-install(FILES
-${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules/FindLAPACK.cmake
-${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules/FindSCALAPACK.cmake
-${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules/FindMETIS.cmake
-${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules/FindScotch.cmake
-${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules/FindMUMPS.cmake
-DESTINATION cmake
-)
-
+message(STATUS "ORDERING_FLAGS = ${ORDERING_FLAGS}")
+message(STATUS "ORDERING_LIBS = ${ORDERING_LIBS}")
+message(STATUS "End of Linking Ordering Lib(PORD)")
 
 # --- MUMPS build
+message(STATUS "mumps_SOURCE_DIR = ${mumps_SOURCE_DIR}")
 
 configure_file(PORD/lib/CMakeLists.txt ${mumps_SOURCE_DIR}/PORD/lib/ COPYONLY)
 add_subdirectory(${mumps_SOURCE_DIR}/PORD/lib ${mumps_BINARY_DIR}/PORD/lib)
@@ -106,11 +124,9 @@ add_subdirectory(${mumps_SOURCE_DIR}/src ${mumps_BINARY_DIR}/src)
 
 if(BUILD_TESTING)
   add_subdirectory(tests)
-
-  configure_file(examples/CMakeLists.txt ${mumps_SOURCE_DIR}/examples/ COPYONLY)
-  add_subdirectory(${mumps_SOURCE_DIR}/examples ${mumps_BINARY_DIR}/examples)
+  #configure_file(examples/CMakeLists.txt ${mumps_SOURCE_DIR}/examples/ COPYONLY)
+  #add_subdirectory(${mumps_SOURCE_DIR}/examples ${mumps_BINARY_DIR}/examples)
 endif()
-
 
 # --- feature summary
 

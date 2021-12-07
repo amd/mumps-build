@@ -32,7 +32,7 @@ $<$<VERSION_GREATER_EQUAL:${MUMPS_UPSTREAM_VERSION},4.9>:mumps_size.c>
 "$<$<VERSION_GREATER_EQUAL:${MUMPS_UPSTREAM_VERSION},5.2>:mumps_config_file_C.c;mumps_thread_affinity.c;sol_common.F>"
 $<$<VERSION_GREATER_EQUAL:${MUMPS_UPSTREAM_VERSION},5.3>:ana_blk.F>
 $<$<VERSION_GREATER_EQUAL:${MUMPS_UPSTREAM_VERSION},5.4>:mumps_register_thread.c>
-mumps_common.c mumps_io_basic.c mumps_io_thread.c mumps_io_err.c # mumps_io.c
+mumps_common.c mumps_io_basic.c mumps_io_thread.c mumps_io_err.c mumps_io.c
 "$<$<AND:$<BOOL:${scotch}>,$<VERSION_GREATER_EQUAL:${MUMPS_UPSTREAM_VERSION},5.1>>:mumps_scotch.c;mumps_scotch64.c;mumps_scotch_int.c;mumps_metis.c;mumps_metis64.c;mumps_metis_int.c>"
 )
 
@@ -46,7 +46,6 @@ target_include_directories(mumps_common PUBLIC
 "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR};${mumps_SOURCE_DIR}/include>"
 $<INSTALL_INTERFACE:include>
 )
-
 target_compile_definitions(mumps_common PRIVATE ${ORDERING_FLAGS})
 # if(WIN32)
 #   target_compile_definitions(mumps_common PRIVATE MUMPS_WIN32)
@@ -125,22 +124,20 @@ target_link_libraries(${a}mumps PRIVATE mumps_common ${ORDERING_LIBS} ${NUMERIC_
 string(TOUPPER ${a} aup)
 
 set_target_properties(${a}mumps PROPERTIES
-Fortran_MODULE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/include
-LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}
-ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}
-EXPORT_NAME ${aup}MUMPS
-VERSION ${MUMPS_VERSION}
-)
+  Fortran_MODULE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/include
+  LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}
+  ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}
+  EXPORT_NAME ${aup}MUMPS
+  VERSION ${MUMPS_VERSION})
 
 install(TARGETS ${a}mumps EXPORT ${PROJECT_NAME}-targets)
 
 install(FILES
-${mumps_SOURCE_DIR}/include/${a}mumps_c.h
-${mumps_SOURCE_DIR}/include/${a}mumps_root.h
-${mumps_SOURCE_DIR}/include/${a}mumps_struc.h
-${mumps_SOURCE_DIR}/include/mumps_int_def.h
-TYPE INCLUDE
-)
+  ${mumps_SOURCE_DIR}/include/${a}mumps_c.h
+  ${mumps_SOURCE_DIR}/include/${a}mumps_root.h
+  ${mumps_SOURCE_DIR}/include/${a}mumps_struc.h
+  ${mumps_SOURCE_DIR}/include/mumps_int_def.h
+  TYPE INCLUDE)
 
 endforeach()
 
@@ -168,37 +165,3 @@ install(TARGETS MUMPS EXPORT ${PROJECT_NAME}-targets)
 # this must NOT be an ALIAS or linking in other packages breaks.
 add_library(MUMPS::MUMPS INTERFACE IMPORTED GLOBAL)
 target_link_libraries(MUMPS::MUMPS INTERFACE MUMPS)
-
-
-# --- PATCH 5.4.1
-if(MUMPS_UPSTREAM_VERSION VERSION_EQUAL 5.4.0 OR MUMPS_UPSTREAM_VERSION VERSION_EQUAL 5.4.1)
-  file(MAKE_DIRECTORY ${mumps_BINARY_DIR}/include)
-
-  add_custom_command(
-  OUTPUT ${mumps_BINARY_DIR}/include/mumps_io_patched.h
-  COMMAND ${CMAKE_COMMAND}
-    -Din_file:FILEPATH=${mumps_SOURCE_DIR}/src/mumps_io.h
-    -Dpatch_file:FILEPATH=${PROJECT_SOURCE_DIR}/cmake/mumps_io.h.patch
-    -Dout_file:FILEPATH=${mumps_BINARY_DIR}/include/mumps_io_patched.h
-    -P ${PROJECT_SOURCE_DIR}/cmake/PatchFile.cmake
-  DEPENDS ${mumps_SOURCE_DIR}/src/mumps_io.h
-  )
-  add_custom_command(
-    OUTPUT ${mumps_BINARY_DIR}/mumps_io.c
-    COMMAND ${CMAKE_COMMAND}
-      -Din_file:FILEPATH=${mumps_SOURCE_DIR}/src/mumps_io.c
-      -Dpatch_file:FILEPATH=${PROJECT_SOURCE_DIR}/cmake/mumps_io.c.patch
-      -Dout_file:FILEPATH=${mumps_BINARY_DIR}/mumps_io.c
-      -P ${PROJECT_SOURCE_DIR}/cmake/PatchFile.cmake
-    DEPENDS ${mumps_SOURCE_DIR}/src/mumps_io.c
-    )
-else()
-  configure_file(${mumps_SOURCE_DIR}/src/mumps_io.h ${mumps_BINARY_DIR}/include/mumps_io_patched.h COPYONLY)
-  configure_file(${mumps_SOURCE_DIR}/src/mumps_io.c ${mumps_BINARY_DIR}/mumps_io.c COPYONLY)
-endif()
-target_sources(mumps_common PRIVATE ${mumps_BINARY_DIR}/mumps_io.c ${mumps_BINARY_DIR}/include/mumps_io_patched.h)
-target_include_directories(mumps_common BEFORE PUBLIC
-$<BUILD_INTERFACE:${mumps_BINARY_DIR}/include>
-$<INSTALL_INTERFACE:include>
-)
-# --- END PATCH 5.4.1
