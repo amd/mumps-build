@@ -76,8 +76,12 @@ include(cmake/Modules/FindLAPACK.cmake)
 
 if(intsize64)
    add_definitions("-DInt=__int64" "-Dintsize64" "-DUInt=unsigned __int64" "-i8")
+   find_library(IMPI_LIB_ILP64
+     NAMES libmpi_ilp64
+     HINTS ${USER_PROVIDED_IMPILIB_ILP64_PATH})
 else(intsize64)
    add_definitions("-DUInt=unsigned int")
+   unset(IMPI_LIB_ILP64)
 ENDIF(intsize64)
 
 # -- Scalapack / MPI

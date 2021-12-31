@@ -33,7 +33,7 @@ CMake:
 4. Configure paths to libs/dlls
 4. Configure Mumps Project using Ninja:
 	
-	cmake S . -B ninja_build_dir -G "Ninja" -DENABLE_AOCL=ON -DENABLE_MKL=OFF -DBUILD_TESTING=ON -DCMAKE_INSTALL_PREFIX="</mumps/install/path>" -Dscotch=ON -Dopenmp=ON -DBUILD_SHARED_LIBS=OFF -Dparallel=ON -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -DCMAKE_BUILD_TYPE=Release -DUSER_PROVIDED_BLIS_LIBRARY_PATH="<path/to/blis/library/path>" -DUSER_PROVIDED_BLIS_INCLUDE_PATH="<path/to/blis/headers/path>" -DUSER_PROVIDED_LAPACK_LIBRARY_PATH="<path/to/libflame/library/path>" -DUSER_PROVIDED_LAPACK_INCLUDE_PATH="<path/to/libflame/headers/path>" -DUSER_PROVIDED_SCALAPACK_LIBRARY_PATH="<path/to/scalapack/library/path>" -DUSER_PROVIDED_METIS_LIBRARY_PATH="<path/to/metis/library/path>" -DUSER_PROVIDED_METIS_INCLUDE_PATH="<path/to/metis/include/path>" -DCMAKE_C_COMPILER="C:/Program Files (x86)/Intel/oneAPI/compiler/2021.3.0/windows/bin/intel64/icl.exe" -DCMAKE_CXX_COMPILER="C:/Program Files (x86)/Intel/oneAPI/compiler/2021.3.0/windows/bin/intel64/icl.exe" -DCMAKE_Fortran_COMPILER="C:/Program Files (x86)/Intel/oneAPI/compiler/2021.3.0/windows/bin/intel64/ifort.exe" -DBOOST_ROOT="<path/to/boost_1_77_0>" -Dintsize64=OFF
+	cmake S . -B ninja_build_dir -G "Ninja" -DENABLE_AOCL=ON -DENABLE_MKL=OFF -DBUILD_TESTING=ON -DCMAKE_INSTALL_PREFIX="</mumps/install/path>" -Dscotch=ON -Dopenmp=ON -DBUILD_SHARED_LIBS=OFF -Dparallel=ON -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -DCMAKE_BUILD_TYPE=Release -DUSER_PROVIDED_BLIS_LIBRARY_PATH="<path/to/blis/library/path>" -DUSER_PROVIDED_BLIS_INCLUDE_PATH="<path/to/blis/headers/path>" -DUSER_PROVIDED_LAPACK_LIBRARY_PATH="<path/to/libflame/library/path>" -DUSER_PROVIDED_LAPACK_INCLUDE_PATH="<path/to/libflame/headers/path>" -DUSER_PROVIDED_SCALAPACK_LIBRARY_PATH="<path/to/scalapack/library/path>" -DUSER_PROVIDED_METIS_LIBRARY_PATH="<path/to/metis/library/path>" -DUSER_PROVIDED_METIS_INCLUDE_PATH="<path/to/metis/include/path>" -DUSER_PROVIDED_IMPILIB_ILP64_PATH=“<path/to/intel/mpi/lib/ilp64>” -DCMAKE_C_COMPILER="C:/Program Files (x86)/Intel/oneAPI/compiler/2021.3.0/windows/bin/intel64/icl.exe" -DCMAKE_CXX_COMPILER="C:/Program Files (x86)/Intel/oneAPI/compiler/2021.3.0/windows/bin/intel64/icl.exe" -DCMAKE_Fortran_COMPILER="C:/Program Files (x86)/Intel/oneAPI/compiler/2021.3.0/windows/bin/intel64/ifort.exe" -DBOOST_ROOT="<path/to/boost_1_77_0>" -Dintsize64=OFF
 	
 	Following options are enabled in the command:
 	-DENABLE_AOCL=ON 															<Enable AOCL Libraries>
@@ -53,6 +53,7 @@ CMake:
 	-DUSER_PROVIDED_SCALAPACK_LIBRARY_PATH=“<path/to/scalapack/lib/path>”		<path to AOCL built Scalapack library>	
 	-DUSER_PROVIDED_METIS_LIBRARY_PATH=“<path/to/metis/lib>”					<path to Metis library>
 	-DUSER_PROVIDED_METIS_INCLUDE_PATH=“<path/to/metis/header>”					<path to Metis Include header>
+	-DUSER_PROVIDED_IMPILIB_ILP64_PATH=“<path/to/intel/mpi/lib/ilp64>”			<path to Intel's ILP64 MPI library>
 	-DCMAKE_C_COMPILER=“<path/to/intel c compiler>”								<path to Intel C Compiler>
 	-DCMAKE_Fortran_COMPILER=“<path/to/intel fortran compiler>”					<path to Intel Fortran Compiler>
 	-DBOOST_ROOT=“<path/to/BOOST/INSTALLATION>”									<path to Boost libraries/headers>
@@ -70,9 +71,6 @@ CMake:
 	
 	mpiexec -n 2 --map-by L3cache --bind-to core Csimple.exe
 	mpiexec -n 2 --map-by L3cache --bind-to core amd_mumps_aocl sample.mtx
-
-Limitations
-1. ILP64 (or -Dintsize64=ON) is not supported. 
 
 ## Note
 1. Cmake Build system will download latest Mumps tar ball and proceed with configuration and build generation
