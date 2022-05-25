@@ -246,10 +246,12 @@ endfunction(openblas_libs)
 function(aocl_libs)
 # AOCL: Include LAPACK(LibFlame) and dependent (Blis) Libraries
 message(STATUS "start of finding LibFlame Library")
+
 find_library(LAPACK_LIBRARY
-  NAMES AOCL-LibFLAME-Win
+  NAMES AOCL-LibFLAME-Win-MT-dll AOCL-LibFLAME-Win
   HINTS ${USER_PROVIDED_LAPACK_LIBRARY_PATH})
 message(STATUS "End of finding LibFlame Library: ${LAPACK_LIBRARY}")
+
 if(NOT LAPACK_LIBRARY)
   message(FATAL_ERROR "LibFlame library not found")
 endif()

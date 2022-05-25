@@ -46,6 +46,7 @@
 #define JOB_INIT -1
 #define JOB_END -2
 #define USE_COMM_WORLD -987654
+#define PARAM_LOG
 
 //
 // Timing includes
@@ -56,7 +57,16 @@ using get_time = std::chrono::steady_clock;
 
 int main(int argc, char* argv[]) {
 
+    if (argc != 3) //checks the amount of CL args
+    {
+        printf("Usage: amd_aocl.exe <input mtx file> <symmetry_type>\n");
+		printf("\t symmetry_type = 0: A is unsymmetric\n");
+		printf("\t symmetry_type = 1: A is SPD\n");
+		printf("\t symmetry_type = 2: A is general symmetric\n");
+        return 1;
+    }
     const std::string matrix_name = argv[1];
+    const int symVal = atoi(argv[2]);
     std::string fileline;
     std::vector<std::string> vecstrng;
     char* filechar;
@@ -153,7 +163,12 @@ int main(int argc, char* argv[]) {
               /* Initialize a MUMPS instance. Use MPI_COMM_WORLD */
     id.job = JOB_INIT; /* JOB = -1 : initializes an instance of the package */
     id.comm_fortran = USE_COMM_WORLD;
-    id.sym = 1; /* A is assumed to be symmetric positive definite */
+    /*
+    * SYM = 0: A is unsymmetric
+    * SYM = 1: A is SPD
+    * SYM = 2: A is general symmetric
+    */
+    id.sym = symVal;
     id.par = 1; /* The host is also involved in the parallel steps of the factorization and solve phases */
 
 #ifdef VERBOSE_OUTPUT
@@ -337,37 +352,48 @@ int main(int argc, char* argv[]) {
     // ---------------------------------------------
     if (myid == 0)
     {
-#if 1//def VERBOSE_OUTPUT
-        std::cout << " - comm_size = " << comm_size << std::endl;
-        std::cout << " - matrix_name = " << matrix_name << std::endl;
-        printf("\n$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$");
-        fflush(stdout);
-        printf("\nRelative Error is: %e ", relativeError);
-        fflush(stdout);
-        printf("\nTime Symbolic:     %10.2f ", std::chrono::duration_cast<ns>(SymbolicFactorizationTime).count() / 1.0e9);
-        fflush(stdout);
-        printf("\nTime Numeric:      %10.2f ", std::chrono::duration_cast<ns>(NumericFactorizationTime).count() / 1.0e9);
-        fflush(stdout);
-        printf("\nTime Solve:        %10.2f ", std::chrono::duration_cast<ns>(FBSolveTime).count() / 1.0e9);
-        fflush(stdout);
-        printf("\nTime S+N+S:        %10.2f ", std::chrono::duration_cast<ns>(SymbolicFactorizationTime + NumericFactorizationTime + FBSolveTime).count() / 1.0e9);
-        fflush(stdout);
-        printf("\n$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$\n");
-        fflush(stdout);
-#endif
         int ompNumThrds = omp_get_max_threads();
         double sparsity_percent = 0.0;
-        double symbolic_t = 0.0, numeric_t = 0.0, solve_t = 0.0, sns_t = 0.0;        
+        double symbolic_t = 0.0, numeric_t = 0.0, solve_t = 0.0, sns_t = 0.0;
         sparsity_percent = (nrows * nrows) - nnz;
-        sparsity_percent = sparsity_percent/(nrows * nrows);
+        sparsity_percent = sparsity_percent / (nrows * nrows);
         sparsity_percent = sparsity_percent * 100;
         symbolic_t = std::chrono::duration_cast<ns>(SymbolicFactorizationTime).count() / 1.0e9;
         numeric_t = std::chrono::duration_cast<ns>(NumericFactorizationTime).count() / 1.0e9;
         solve_t = std::chrono::duration_cast<ns>(FBSolveTime).count() / 1.0e9;
         sns_t = std::chrono::duration_cast<ns>(SymbolicFactorizationTime + NumericFactorizationTime + FBSolveTime).count() / 1.0e9;
-        //input, nrows, nnz, sparsity_%, mpiProcs, ompThrds, symbolic_t, numeric_t, solve_t, sns_t, relError
-        printf("%s, %d, %d, %5.2f, %d, %d, %5.2f, %5.2f, %5.2f, %5.2f, %5.2f\n", matrix_name.c_str(), nrows, nnz, sparsity_percent, comm_size, ompNumThrds, 
-                                                                                 symbolic_t, numeric_t, solve_t, sns_t, relativeError);
+#ifdef PARAM_LOG
+    std::cout.precision(2);
+    std::cout.setf(std::ios::fixed);
+    std::cout.setf(std::ios::left);
+
+    std::cout << std::setw(12) << "M" 
+            << std::setw(12) << "N" 
+            << std::setw(12) << "nnz"
+	        << std::setw(12) << "mpi_ranks" 
+            << std::setw(12) << "sparsity_%" 
+            << std::setw(16) << "symbolic_time" 
+            << std::setw(16) << "numeric_time" 
+            << std::setw(16) << "solve_time" 
+            << std::setw(16) << "sns_time" 
+            << std::setw(12) << "relativeError" 
+            << std::endl;
+
+    std::cout << std::setw(12) << nrows 
+            << std::setw(12) << ncols 
+            << std::setw(12) << nnz
+	        << std::setw(12) << comm_size 
+            << std::setw(12) << sparsity_percent 
+            << std::setw(16) << std::scientific << symbolic_t
+	        << std::setw(16) << std::scientific << numeric_t
+	        << std::setw(16) << std::scientific << solve_t 
+            << std::setw(16) << std::scientific << sns_t 
+            << std::setw(12) << std::fixed << relativeError << std::endl;          
+#else
+        //input, mpiProcs, ompThrds, symmetry, nrows, nnz, sparsity_%, symbolic_t, numeric_t, solve_t, sns_t, relError
+        printf("%s, %d, %d, %d, %d, %d, %5.2f, %5.2f, %5.2f, %5.2f, %5.2f, %5.2f\n", matrix_name.c_str(), comm_size, ompNumThrds, id.sym, nrows, nnz, sparsity_percent,
+            symbolic_t, numeric_t, solve_t, sns_t, relativeError);
+#endif
     }
 
 

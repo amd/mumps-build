@@ -31,19 +31,6 @@ set(Boost_USE_MULTITHREADED ON)
 set(Boost_USE_STATIC_RUNTIME OFF) 
 find_package(Boost 1.77 REQUIRED) # header only libraries must not be added here
 
-#copy the libraries into tests directory to run executable successfully
-
-if(ENABLE_AOCL)	
-	configure_file(${USER_PROVIDED_BLIS_LIBRARY_PATH}/AOCL-LibBlis-Win-MT-dll.lib ${CMAKE_BINARY_DIR}/tests/ COPYONLY)
-	configure_file(${USER_PROVIDED_BLIS_LIBRARY_PATH}/AOCL-LibBlis-Win-MT-dll.dll ${CMAKE_BINARY_DIR}/tests/ COPYONLY)
-
-	configure_file(${USER_PROVIDED_LAPACK_LIBRARY_PATH}/AOCL-LibFLAME-Win.lib ${CMAKE_BINARY_DIR}/tests/ COPYONLY)
-	configure_file(${USER_PROVIDED_LAPACK_LIBRARY_PATH}/AOCL-LibFLAME-Win.dll ${CMAKE_BINARY_DIR}/tests/ COPYONLY)
-
-	configure_file(${USER_PROVIDED_SCALAPACK_LIBRARY_PATH}/scalapack.lib ${CMAKE_BINARY_DIR}/tests/ COPYONLY)
-	configure_file(${USER_PROVIDED_SCALAPACK_LIBRARY_PATH}/scalapack.dll ${CMAKE_BINARY_DIR}/tests/ COPYONLY)
-	configure_file(${USER_PROVIDED_METIS_LIBRARY_PATH}/metis.lib ${CMAKE_BINARY_DIR}/tests/ COPYONLY)
-endif()
 if("d" IN_LIST arith)
 	add_executable(amd_aocl amd_mumps.cpp)
 	target_compile_options(amd_aocl PRIVATE /Qopenmp /Qopenmp-threadprivate:compat -DAdd_)
