@@ -1,18 +1,38 @@
+if(NOT arith)
+  message(FATAL_ERROR "Please specify arithmetic precision like:
+    cmake -B build -Darith=s
+  or similar. See MUMPS/Readme.md for details")
+endif()
+
+
 set_property(GLOBAL PROPERTY JOB_POOLS Njobs=3)
 cmake_host_system_information(RESULT _memfree QUERY AVAILABLE_PHYSICAL_MEMORY)
 # for low memory systems
 
-# -- generated MUMPS_INTSIZE64 header
-if(intsize64)
-  set(MUMPS_INTSIZE MUMPS_INTSIZE64)
+# -- generated MUMPS_INTSIZE header
+if(MUMPS_UPSTREAM_VERSION VERSION_GREATER_EQUAL 5.5.0)
+  if(intsize64)
+    set(intsrc ${mumps_SOURCE_DIR}/src/mumps_int_def64_h.in)
+  else()
+    set(intsrc ${mumps_SOURCE_DIR}/src/mumps_int_def32_h.in)
+  endif()
+  configure_file(${intsrc}
+  ${mumps_SOURCE_DIR}/include/mumps_int_def.h
+  COPYONLY
+  )
 else()
-  set(MUMPS_INTSIZE MUMPS_INTSIZE32)
+  if(intsize64)
+    set(MUMPS_INTSIZE MUMPS_INTSIZE64)
+  else()
+    set(MUMPS_INTSIZE MUMPS_INTSIZE32)
+  endif()
+  configure_file(
+  ${PROJECT_SOURCE_DIR}/include/mumps_int_def.h.in
+  ${mumps_SOURCE_DIR}/include/mumps_int_def.h @ONLY
+  )
 endif()
-configure_file(
-${PROJECT_SOURCE_DIR}/include/mumps_int_def.h.in
-${mumps_SOURCE_DIR}/include/mumps_int_def.h @ONLY)
 
-# -- Mumps COMMMON
+# -- Mumps COMMON
 set(COMM_SRC
 "$<$<VERSION_LESS:${MUMPS_UPSTREAM_VERSION},5.0>:mumps_part9.F>"
 "$<$<VERSION_GREATER_EQUAL:${MUMPS_UPSTREAM_VERSION},5.0>:ana_omp_m.F;double_linked_list.F;fac_asm_build_sort_index_ELT_m.F;fac_asm_build_sort_index_m.F;fac_descband_data_m.F;fac_future_niv2_mod.F;fac_ibct_data_m.F;fac_maprow_data_m.F;front_data_mgt_m.F;mumps_comm_ibcast.F;mumps_l0_omp_m.F;omp_tps_common_m.F>"
@@ -41,11 +61,12 @@ mumps_common.c mumps_io_basic.c mumps_io_thread.c mumps_io_err.c mumps_io.c
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/include)
 
 add_library(mumps_common ${COMM_SRC} ${COMM_OTHER_SRC})
-target_link_libraries(mumps_common PRIVATE ${ORDERING_LIBS} ${NUMERIC_LIBS})
+target_link_libraries(mumps_common PUBLIC ${ORDERING_LIBS} ${NUMERIC_LIBS})
 target_include_directories(mumps_common PUBLIC
 "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR};${mumps_SOURCE_DIR}/include>"
 $<INSTALL_INTERFACE:include>
 )
+
 target_compile_definitions(mumps_common PRIVATE ${ORDERING_FLAGS})
 # if(WIN32)
 #   target_compile_definitions(mumps_common PRIVATE MUMPS_WIN32)
@@ -54,6 +75,7 @@ set_target_properties(mumps_common PROPERTIES
 Fortran_MODULE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/include
 LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}
 ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}
+RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}
 EXPORT_NAME COMMON
 VERSION ${MUMPS_VERSION}
 )
@@ -119,25 +141,28 @@ target_include_directories(${a}mumps PUBLIC
 $<BUILD_INTERFACE:${mumps_SOURCE_DIR}/include>
 $<INSTALL_INTERFACE:include>
 )
-target_link_libraries(${a}mumps PRIVATE mumps_common ${ORDERING_LIBS} ${NUMERIC_LIBS})
+target_link_libraries(${a}mumps PUBLIC mumps_common)
 
 string(TOUPPER ${a} aup)
 
 set_target_properties(${a}mumps PROPERTIES
-  Fortran_MODULE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/include
-  LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}
-  ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}
-  EXPORT_NAME ${aup}MUMPS
-  VERSION ${MUMPS_VERSION})
+Fortran_MODULE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/include
+LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}
+ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}
+RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}
+EXPORT_NAME ${aup}MUMPS
+VERSION ${MUMPS_VERSION}
+)
 
 install(TARGETS ${a}mumps EXPORT ${PROJECT_NAME}-targets)
 
 install(FILES
-  ${mumps_SOURCE_DIR}/include/${a}mumps_c.h
-  ${mumps_SOURCE_DIR}/include/${a}mumps_root.h
-  ${mumps_SOURCE_DIR}/include/${a}mumps_struc.h
-  ${mumps_SOURCE_DIR}/include/mumps_int_def.h
-  TYPE INCLUDE)
+${mumps_SOURCE_DIR}/include/${a}mumps_c.h
+${mumps_SOURCE_DIR}/include/${a}mumps_root.h
+${mumps_SOURCE_DIR}/include/${a}mumps_struc.h
+${mumps_SOURCE_DIR}/include/mumps_int_def.h
+TYPE INCLUDE
+)
 
 endforeach()
 
@@ -155,7 +180,7 @@ TYPE INCLUDE
 # It knows all the include directories.
 
 add_library(MUMPS INTERFACE)
-target_link_libraries(MUMPS INTERFACE ${_ifc_libs} mumps_common pord
+target_link_libraries(MUMPS INTERFACE ${_ifc_libs}
 $<$<NOT:$<BOOL:${parallel}>>:mpiseq>
 )
 

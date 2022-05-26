@@ -14,9 +14,12 @@ endif()
 
 # --- compiler check
 
-add_compile_definitions(CDEFS "Add_")
+add_compile_definitions(Add_)
 # "Add_" works for all modern compilers we tried.
 
+if(MSVC)
+  add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
+endif()
 
 if(CMAKE_Fortran_COMPILER_ID MATCHES Intel)
   add_compile_options(

@@ -3,7 +3,6 @@
 
 # Modifications Copyright (c) 2021 Advanced Micro Devices, Inc. All rights reserved
 
-#THE SOFTWARE.
 #[=======================================================================[.rst:
 FindMETIS
 -------
@@ -38,7 +37,6 @@ if(parallel IN_LIST METIS_FIND_COMPONENTS)
   endif()
 endif()
 
-
 find_library(METIS_LIBRARY
   NAMES metis
   HINTS ${USER_PROVIDED_METIS_LIBRARY_PATH})
@@ -50,15 +48,13 @@ else()
 endif()
 
 find_path(METIS_INCLUDE_DIR
-  NAMES ${metis_inc} 
+  NAMES ${metis_inc}
   HINTS ${USER_PROVIDED_METIS_INCLUDE_PATH})
-
 
 configure_file(
   ${METIS_INCLUDE_DIR}/${metis_inc}
   ${CMAKE_SOURCE_DIR}/include/${metis_inc} @ONLY)
-
-
+  
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(METIS
     REQUIRED_VARS METIS_LIBRARY METIS_INCLUDE_DIR

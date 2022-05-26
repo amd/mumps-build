@@ -20,9 +20,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-option(autobuild "auto-build Lapack and/or Scalapack if missing or broken" true)
-
-option(dev "developer mode")
 option(parallel "parallel or sequential (non-MPI, non-Scalapack)" ON)
 option(intsize64 "use 64-bit integers in C and Fortran" OFF)
 
@@ -42,18 +39,27 @@ if(intsize64)
   )
 endif()
 
-set(CMAKE_EXPORT_COMPILE_COMMANDS on)
-
 set(CMAKE_TLS_VERIFY true)
 
 
-if(dev)
+set(FETCHCONTENT_UPDATES_DISCONNECTED_MUMPS true)
+set_directory_properties(PROPERTIES EP_UPDATE_DISCONNECTED true)
 
+set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/Modules)
+
+if(CMAKE_GENERATOR STREQUAL "Ninja Multi-Config")
+  set(EXTPROJ_GENERATOR "Ninja")
 else()
-  set(FETCHCONTENT_UPDATES_DISCONNECTED_MUMPS true)
-  set_directory_properties(PROPERTIES EP_UPDATE_DISCONNECTED true)
+  set(EXTPROJ_GENERATOR ${CMAKE_GENERATOR})
 endif()
 
+# Rpath options necessary for shared library install to work correctly in user projects
+set(CMAKE_INSTALL_NAME_DIR ${CMAKE_INSTALL_PREFIX}/lib)
+set(CMAKE_INSTALL_RPATH ${CMAKE_INSTALL_PREFIX}/lib)
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH true)
+
+# Necessary for shared library with Visual Studio / Windows oneAPI
+set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS true)
 
 if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
   # will not take effect without FORCE
@@ -61,6 +67,10 @@ if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
   set(CMAKE_INSTALL_PREFIX ${CMAKE_BINARY_DIR} CACHE PATH "Install top-level directory" FORCE)
 endif()
 
+# allow CMAKE_PREFIX_PATH with ~ expand
+if(CMAKE_PREFIX_PATH)
+  get_filename_component(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} ABSOLUTE)
+endif()
 
 # --- auto-ignore build directory
 if(NOT EXISTS ${PROJECT_BINARY_DIR}/.gitignore)

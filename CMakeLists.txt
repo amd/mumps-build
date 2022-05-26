@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-cmake_minimum_required(VERSION 3.20...3.22)
+cmake_minimum_required(VERSION 3.19...3.23)
 
 get_property(is_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
 if(NOT is_multi_config AND NOT (CMAKE_BUILD_TYPE OR DEFINED ENV{CMAKE_BUILD_TYPE}))
@@ -39,18 +39,13 @@ HOMEPAGE_URL "http://mumps-solver.org/"
 
 include(CTest)
 
+message(STATUS "MUMPS_UPSTREAM_VERSION = ${MUMPS_UPSTREAM_VERSION}")
 if(NOT MUMPS_UPSTREAM_VERSION)
-  set(MUMPS_UPSTREAM_VERSION 5.4.1)
-endif()
-
-if(CMAKE_GENERATOR STREQUAL "Ninja Multi-Config")
-  set(EXTPROJ_GENERATOR "Ninja")
-else()
-  set(EXTPROJ_GENERATOR ${CMAKE_GENERATOR})
+  set(MUMPS_UPSTREAM_VERSION 5.5.0)
 endif()
 
 if(MSVC AND BUILD_SHARED_LIBS)
-  message(WARNING "MUMPS: Windows MSVC/Intel compilers with **shared** libraries is not supported and will probably fail.
+  message(WARNING "MUMPS: Windows Intel/IntelLLVM compilers with **shared** libraries is not supported and will probably fail.
   Recommend using static libraries, which does work:
   cmake -DBUILD_SHARED_LIBS=off")
 endif()
@@ -59,15 +54,10 @@ set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS true)
 
 # --- user options
 include(cmake/options.cmake)
-include(cmake/libraries.cmake)
-
-# --- compiler setup
-list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules)
-
 include(cmake/compilers.cmake)
 
-# --- download MUMPS
-include(cmake/get_mumps.cmake)
+# --- download MUMPS source
+include(cmake/mumps_src.cmake)
 
 # --- dependencies
 find_package(Threads)
@@ -90,7 +80,7 @@ if(parallel)
   find_package(MPI COMPONENTS C Fortran REQUIRED)
   include(cmake/Modules/FindSCALAPACK.cmake)
 
-  set(NUMERIC_LIBS SCALAPACK::SCALAPACK LAPACK::LAPACK MPI::MPI_Fortran MPI::MPI_C)
+  set(NUMERIC_LIBS SCALAPACK::SCALAPACK MPI::MPI_Fortran MPI::MPI_C)
   if(openmp)
     find_package(OpenMP COMPONENTS C Fortran REQUIRED)
   endif()
@@ -125,11 +115,8 @@ add_subdirectory(${mumps_SOURCE_DIR}/PORD/lib ${mumps_BINARY_DIR}/PORD/lib)
 configure_file(src/CMakeLists.txt ${mumps_SOURCE_DIR}/src/ COPYONLY)
 add_subdirectory(${mumps_SOURCE_DIR}/src ${mumps_BINARY_DIR}/src)
 
-
 if(BUILD_TESTING)
   add_subdirectory(tests)
-  #configure_file(examples/CMakeLists.txt ${mumps_SOURCE_DIR}/examples/ COPYONLY)
-  #add_subdirectory(${mumps_SOURCE_DIR}/examples ${mumps_BINARY_DIR}/examples)
 endif()
 
 # --- feature summary

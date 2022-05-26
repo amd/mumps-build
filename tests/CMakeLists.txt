@@ -22,10 +22,6 @@
 
 # testing what we just built
 
-if(MUMPS_UPSTREAM_VERSION VERSION_LESS 5.1)
-  return()
-endif()
-
 set(Boost_USE_STATIC_LIBS OFF) 
 set(Boost_USE_MULTITHREADED ON)  
 set(Boost_USE_STATIC_RUNTIME OFF) 
@@ -54,7 +50,7 @@ if("d" IN_LIST arith)
 	endif(intsize64)
 	set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 	target_include_directories(amd_aocl PUBLIC ${Boost_INCLUDE_DIRS}) 	
-	target_link_libraries(amd_aocl PRIVATE ${IMPI_LIB_ILP64} ${MPI_C_LIBRARIES} MUMPS::MUMPS ${NUMERIC_LIBS} ${Boost_LIBRARIES})
+  target_link_libraries(amd_aocl PRIVATE ${IMPI_LIB_ILP64} ${MPI_C_LIBRARIES} MUMPS::MUMPS ${NUMERIC_LIBS} ${Boost_LIBRARIES})
 endif()
 
 if("d" IN_LIST arith)
@@ -66,7 +62,23 @@ if("d" IN_LIST arith)
 	   add_definitions("-DUInt=unsigned int")
 	endif(intsize64)
 	set(CMAKE_POSITION_INDEPENDENT_CODE ON)	
-	target_link_libraries(Csimple PRIVATE ${IMPI_LIB_ILP64} ${MPI_C_LIBRARIES} MUMPS::MUMPS ${NUMERIC_LIBS})
+  target_link_libraries(Csimple PRIVATE ${IMPI_LIB_ILP64} ${MPI_C_LIBRARIES} MUMPS::MUMPS ${NUMERIC_LIBS})
 endif()
 
+if(MUMPS_UPSTREAM_VERSION VERSION_LESS 5.1)
+  return()
+endif()
 
+# Windows DLL
+get_property(test_names DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY TESTS)
+
+set_tests_properties(${test_names} PROPERTIES
+RESOURCE_LOCK cpu_mpi
+TIMEOUT 30
+)
+
+if(WIN32 AND CMAKE_VERSION VERSION_GREATER_EQUAL 3.22)
+  set_tests_properties(${test_names} PROPERTIES
+  ENVIRONMENT_MODIFICATION "PATH=path_list_append:${CMAKE_INSTALL_PREFIX}/bin;PATH=path_list_append:${CMAKE_PREFIX_PATH}/bin;PATH=path_list_append:${PROJECT_BINARY_DIR}"
+  )
+endif()
