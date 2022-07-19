@@ -354,14 +354,15 @@ int main(int argc, char* argv[]) {
     {
         int ompNumThrds = omp_get_max_threads();
         double sparsity_percent = 0.0;
-        double symbolic_t = 0.0, numeric_t = 0.0, solve_t = 0.0, sns_t = 0.0;
+        double symbolic_t = 0.0, numeric_t = 0.0, solve_t = 0.0, afs_t = 0.0, fs_t = 0.0;
         sparsity_percent = (nrows * nrows) - nnz;
         sparsity_percent = sparsity_percent / (nrows * nrows);
         sparsity_percent = sparsity_percent * 100;
         symbolic_t = std::chrono::duration_cast<ns>(SymbolicFactorizationTime).count() / 1.0e9;
         numeric_t = std::chrono::duration_cast<ns>(NumericFactorizationTime).count() / 1.0e9;
         solve_t = std::chrono::duration_cast<ns>(FBSolveTime).count() / 1.0e9;
-        sns_t = std::chrono::duration_cast<ns>(SymbolicFactorizationTime + NumericFactorizationTime + FBSolveTime).count() / 1.0e9;
+        afs_t = std::chrono::duration_cast<ns>(SymbolicFactorizationTime + NumericFactorizationTime + FBSolveTime).count() / 1.0e9;
+        fs_t = std::chrono::duration_cast<ns>(NumericFactorizationTime + FBSolveTime).count() / 1.0e9;
 #ifdef PARAM_LOG
     std::cout.precision(2);
     std::cout.setf(std::ios::fixed);
@@ -372,10 +373,11 @@ int main(int argc, char* argv[]) {
             << std::setw(12) << "nnz"
 	        << std::setw(12) << "mpi_ranks" 
             << std::setw(12) << "sparsity_%" 
-            << std::setw(16) << "symbolic_time" 
-            << std::setw(16) << "numeric_time" 
+            << std::setw(16) << "analysis_time" 
+            << std::setw(16) << "fact_time" 
             << std::setw(16) << "solve_time" 
-            << std::setw(16) << "sns_time" 
+            << std::setw(16) << "afs_time" 
+            << std::setw(16) << "fs_time" 
             << std::setw(12) << "relativeError" 
             << std::endl;
 
@@ -387,12 +389,13 @@ int main(int argc, char* argv[]) {
             << std::setw(16) << std::scientific << symbolic_t
 	        << std::setw(16) << std::scientific << numeric_t
 	        << std::setw(16) << std::scientific << solve_t 
-            << std::setw(16) << std::scientific << sns_t 
+            << std::setw(16) << std::scientific << afs_t 
+            << std::setw(16) << std::scientific << fs_t
             << std::setw(12) << std::fixed << relativeError << std::endl;          
 #else
-        //input, mpiProcs, ompThrds, symmetry, nrows, nnz, sparsity_%, symbolic_t, numeric_t, solve_t, sns_t, relError
-        printf("%s, %d, %d, %d, %d, %d, %5.2f, %5.2f, %5.2f, %5.2f, %5.2f, %5.2f\n", matrix_name.c_str(), comm_size, ompNumThrds, id.sym, nrows, nnz, sparsity_percent,
-            symbolic_t, numeric_t, solve_t, sns_t, relativeError);
+        //input, mpiProcs, ompThrds, symmetry, nrows, nnz, sparsity_%, analysis_time, fact_time, solve_t, afs_time, fs_time, relError
+        printf("%s, %d, %d, %d, %d, %d, %5.2f, %5.2f, %5.2f, %5.2f, %5.2f, %5.2f, %5.2f\n", matrix_name.c_str(), comm_size, ompNumThrds, id.sym, nrows, nnz, sparsity_percent,
+            symbolic_t, numeric_t, solve_t, afs_t, fs_t, relativeError);
 #endif
     }
 

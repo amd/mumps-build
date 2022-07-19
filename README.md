@@ -12,6 +12,17 @@ CMake:
 	a. Latest Ninja Binary at https://github.com/ninja-build/ninja/releases/download/v1.10.2/ninja-win.zip
 1. Intel OneAPI toolkit, should include C, C++, Fortran Compilers, MPI, MKL libraries (refer https://software.intel.com/content/www/us/en/develop/articles/oneapi-standalone-components.html#vtune)
 2. Prebuilt AOCL libraries for Blis, Libflame and Scalapack
+	a. Blis and Libflame libraries can be built from source or extracted from AOCL_Windows-setup-xxxx-AMD.exe based on integer size needed, LP64 or ILP64. Refer https://developer.amd.com/amd-aocl/ for more details.
+		1. Choose MT Shared libraries for Blis: AOCL-LibBlis-Win-MT-dll.lib and AOCL-LibBlis-Win-MT-dll.dll
+		2. Shared libraries for Libflame: AOCL-LibFlame-Win-MT-dll.lib and AOCL-LibFlame-Win-MT-dll.dll
+	b. Scalapack library needs to be built manually after the below changes to sources for Mumps 
+		a. Comment the line that sets 'lowercase' to 'CMAKE_Fortran_FLAGS' variable in aocl-scalapack\BLACS\INSTALL\CMakeLists.txt and aocl-scalapack/CMakeLists.txt
+			#set (CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} /names:lowercase")
+		b. Remove DTL Logging source files "aocl_dtl_trace_entry.c" and "aocl_dtl_trace_exit.c" from aocl-scalapack\SRC\CMakeLists.txt
+		c. Link the Blis/Libflame libraries that are extracted from AMD installer exe and build the Scalapack library
+		d. Refer AOCL User Guide for build instructions of Scalapack at https://developer.amd.com/amd-aocl/
+	c. LP64/ILP64 libraries of the dependent libraries (Blis, Libflame and Scalapack) need to be linked with the corresponding Mumps LP64/ILP64 builds
+	
 3. If reordering library is chosen to be Metis, Prebuilt Metis Library from SuiteSparse public repo (https://github.com/group-gu/SuiteSparse.git). Build Metis library separately from metis folder. 
 	a. cd SuiteSparse\metis-5.1.0
 	b. Define IDXTYPEWIDTH and REALTYPEWIDTH to 32/64 based on integer size required in metis/include/metis.h
