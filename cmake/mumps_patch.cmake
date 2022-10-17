@@ -1,6 +1,6 @@
 # MIT License
 #  
-# Copyright (c) <2021> Advanced Micro Devices, Inc. All rights reserved
+# Copyright (c) 2021-2022 Advanced Micro Devices, Inc. All rights reserved
 #  
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -44,9 +44,6 @@ execute_process(
 configure_file(
   ${mumps_patch_file}
   ${mumps_orig} @ONLY)
-
-message(STATUS "file patched at the directory: ${mumps_patch_file}")
-message(STATUS "file taken from and replaced at the directory: ${mumps_orig}")
 
 file (REMOVE
     ${mumps_patch_file}

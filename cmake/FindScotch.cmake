@@ -52,18 +52,19 @@ set(Scotch_LIBRARIES)
 find_path(Scotch_INCLUDE_DIR
 NAMES scotch.h
 PATH_SUFFIXES scotch openmpi openmpi-x86_64 mpich-x86_64
+DOC "Scotch include directory"
 )
 
 # need plain scotch when using ptscotch
 set(scotch_names scotch scotcherr)
 if(ESMUMPS IN_LIST Scotch_FIND_COMPONENTS)
-  list(PREPEND scotch_names esmumps)
+  list(INSERT scotch_names 0 esmumps)
 endif()
 
 if(parallel IN_LIST Scotch_FIND_COMPONENTS)
-  list(PREPEND scotch_names ptscotch ptscotcherr)
+  list(INSERT scotch_names 0 ptscotch ptscotcherr)
   if(ESMUMPS IN_LIST Scotch_FIND_COMPONENTS)
-    list(PREPEND scotch_names ptesmumps)
+    list(INSERT scotch_names 0 ptesmumps)
   endif()
 endif()
 
@@ -71,6 +72,7 @@ foreach(l IN LISTS scotch_names)
   find_library(Scotch_${l}_LIBRARY
   NAMES ${l}
   PATH_SUFFIXES openmpi/lib mpich/lib
+  DOC "Scotch library"
   )
 
   list(APPEND Scotch_LIBRARIES ${Scotch_${l}_LIBRARY})
@@ -95,12 +97,13 @@ HANDLE_COMPONENTS
 if(Scotch_FOUND)
 set(Scotch_INCLUDE_DIRS ${Scotch_INCLUDE_DIR})
 
+message(VERBOSE "Scotch libraries: ${Scotch_LIBRARIES}
+Scotch include directories: ${Scotch_INCLUDE_DIRS}")
+
 if(NOT TARGET Scotch::Scotch)
   add_library(Scotch::Scotch INTERFACE IMPORTED)
-  set_target_properties(Scotch::Scotch PROPERTIES
-  INTERFACE_LINK_LIBRARIES "${Scotch_LIBRARIES}"
-  INTERFACE_INCLUDE_DIRECTORIES "${Scotch_INCLUDE_DIR}"
-  )
+  set_property(TARGET Scotch::Scotch PROPERTY INTERFACE_LINK_LIBRARIES "${Scotch_LIBRARIES}")
+  set_property(TARGET Scotch::Scotch PROPERTY INTERFACE_INCLUDE_DIRECTORIES "${Scotch_INCLUDE_DIR}")
 endif()
 endif(Scotch_FOUND)
 

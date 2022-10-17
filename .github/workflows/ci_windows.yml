@@ -9,19 +9,53 @@ on:
       - "**.cmake"
       - "**/CMakeLists.txt"
       - ".github/workflows/ci_windows.yml"
+      - "!scripts/*"
 
 
 jobs:
 
   windows:
     runs-on: windows-latest
+    timeout-minutes: 15
     env:
-      CMAKE_GENERATOR: "MinGW Makefiles"
+      CMAKE_GENERATOR: MinGW Makefiles
+
+    strategy:
+      matrix:
+        shared: [true, false]
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: msys2/setup-msys2@v2
+      with:
+        update: true
+        install: >-
+          mingw-w64-x86_64-gcc-fortran
+          mingw-w64-x86_64-lapack
 
-    # GitHub Actions windows image doesn't have WSL, so use version without need to patch
-    - run: cmake -B build -Darith=d -Dparallel:BOOL=false "-DMUMPS_UPSTREAM_VERSION=5.3.5"
-    - run: cmake --build build
+    - name: Put MSYS2_MinGW64 on PATH
+      run: echo "${{ runner.temp }}/msys64/mingw64/bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+    - uses: actions/checkout@v3
+
+    - name: config
+      run: cmake -B build -Darith=d -Dparallel:BOOL=false -DCMAKE_INSTALL_PREFIX=${{ runner.temp }} -DBUILD_SHARED_LIBS:BOOL=${{ matrix.shared }}
+
+    - run: cmake --build build --parallel || cmake --build build -v
+
     - run: ctest --test-dir build --preset default
+
+    - name: install package
+      run: cmake --install build
+
+    - name: configure example
+      run: cmake -S example -B example/build -Dparallel:BOOL=false -DCMAKE_PREFIX_PATH=${{ runner.temp }} -DBUILD_SHARED_LIBS:BOOL=${{ matrix.shared }}
+
+    - name: print config log
+      if: ${{ failure() }}
+      run: cat example/build/CMakeFiles/CMakeError.log
+
+    - name: build example
+      run: cmake --build example/build --parallel || cmake --build example/build -v
+
+    - name: test example
+      run: ctest --test-dir example/build -V

@@ -1,10 +1,3 @@
-if(NOT arith)
-  message(FATAL_ERROR "Please specify arithmetic precision like:
-    cmake -B build -Darith=s
-  or similar. See MUMPS/Readme.md for details")
-endif()
-
-
 set_property(GLOBAL PROPERTY JOB_POOLS Njobs=3)
 cmake_host_system_information(RESULT _memfree QUERY AVAILABLE_PHYSICAL_MEMORY)
 # for low memory systems
@@ -63,14 +56,11 @@ file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/include)
 add_library(mumps_common ${COMM_SRC} ${COMM_OTHER_SRC})
 target_link_libraries(mumps_common PUBLIC ${ORDERING_LIBS} ${NUMERIC_LIBS})
 target_include_directories(mumps_common PUBLIC
-"$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR};${mumps_SOURCE_DIR}/include>"
+"$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR};${mumps_SOURCE_DIR}/include;${NUMERIC_INC}>"
 $<INSTALL_INTERFACE:include>
 )
 
-target_compile_definitions(mumps_common PRIVATE ${ORDERING_FLAGS})
-# if(WIN32)
-#   target_compile_definitions(mumps_common PRIVATE MUMPS_WIN32)
-# endif()
+target_compile_definitions(mumps_common PRIVATE ${ORDERING_DEFS})
 set_target_properties(mumps_common PROPERTIES
 Fortran_MODULE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/include
 LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}
@@ -80,14 +70,18 @@ EXPORT_NAME COMMON
 VERSION ${MUMPS_VERSION}
 )
 
-install(TARGETS mumps_common EXPORT ${PROJECT_NAME}-targets)
+install(TARGETS mumps_common EXPORT ${PROJECT_NAME}-targets
+LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
 
-# -- Mumps
-set(_ifc_libs)
+# --- MUMPS::MUMPS exported target
+# MUMPS::MUMPS is the target most users will link to.
+add_library(MUMPS INTERFACE)
 
-foreach(a ${arith})
-
-list(APPEND _ifc_libs ${a}mumps)
+foreach(a IN LISTS arith)
 
 set(SRC
 "$<$<VERSION_GREATER_EQUAL:${MUMPS_UPSTREAM_VERSION},5.0>:${a}ana_aux.F;${a}ana_aux_par.F;${a}ana_lr.F;${a}fac_asm_master_ELT_m.F;${a}fac_asm_master_m.F;${a}fac_front_aux.F;${a}fac_front_LU_type1.F;${a}fac_front_LU_type2.F;${a}fac_front_LDLT_type1.F;${a}fac_front_LDLT_type2.F;${a}fac_front_type2_aux.F;${a}fac_lr.F;${a}fac_omp_m.F;${a}fac_par_m.F;${a}lr_core.F;${a}mumps_lr_data_m.F;${a}omp_tps_m.F;${a}static_ptr_m.F>"
@@ -131,14 +125,11 @@ set(CINT_SRC mumps_c.c)
 
 add_library(${a}mumps ${CINT_SRC} ${SRC} ${SRC_OTHER})
 if(_memfree LESS 1000)  # < 1GB RAM free
-  set_target_properties(${a}mumps PROPERTIES JOB_POOL_COMPILE Njobs)
+  set_property(TARGET ${a}mumps PROPERTY JOB_POOL_COMPILE Njobs)
 endif()
-target_compile_definitions(${a}mumps PRIVATE MUMPS_ARITH=MUMPS_ARITH_${a} ${ORDERING_FLAGS})
-# if(WIN32)
-#   target_compile_definitions(${a}mumps PRIVATE MUMPS_WIN32)
-# endif()
+target_compile_definitions(${a}mumps PRIVATE MUMPS_ARITH=MUMPS_ARITH_${a} ${ORDERING_DEFS})
 target_include_directories(${a}mumps PUBLIC
-$<BUILD_INTERFACE:${mumps_SOURCE_DIR}/include>
+"$<BUILD_INTERFACE:${mumps_SOURCE_DIR}/include;${CMAKE_CURRENT_BINARY_DIR}/include;${NUMERIC_INC}>"
 $<INSTALL_INTERFACE:include>
 )
 target_link_libraries(${a}mumps PUBLIC mumps_common)
@@ -154,14 +145,21 @@ EXPORT_NAME ${aup}MUMPS
 VERSION ${MUMPS_VERSION}
 )
 
-install(TARGETS ${a}mumps EXPORT ${PROJECT_NAME}-targets)
+target_link_libraries(MUMPS INTERFACE ${a}mumps)
+
+install(TARGETS ${a}mumps EXPORT ${PROJECT_NAME}-targets
+LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
 
 install(FILES
 ${mumps_SOURCE_DIR}/include/${a}mumps_c.h
 ${mumps_SOURCE_DIR}/include/${a}mumps_root.h
 ${mumps_SOURCE_DIR}/include/${a}mumps_struc.h
 ${mumps_SOURCE_DIR}/include/mumps_int_def.h
-TYPE INCLUDE
+DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
 endforeach()
@@ -169,22 +167,18 @@ endforeach()
 install(FILES
 ${mumps_SOURCE_DIR}/include/mumps_c_types.h
 ${mumps_SOURCE_DIR}/include/mumps_compat.h
-TYPE INCLUDE
+DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
 # We do not need the .mod files due to the way MUMPS is interfaced
 # install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/include/ TYPE INCLUDE)
 
-# --- MUMPS::MUMPS exported target
-# MUMPS::MUMPS is the target most users will link to.
-# It knows all the include directories.
-
-add_library(MUMPS INTERFACE)
-target_link_libraries(MUMPS INTERFACE ${_ifc_libs}
-$<$<NOT:$<BOOL:${parallel}>>:mpiseq>
+install(TARGETS MUMPS EXPORT ${PROJECT_NAME}-targets
+LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
-
-install(TARGETS MUMPS EXPORT ${PROJECT_NAME}-targets)
 
 # target for FetchContent
 # this must NOT be an ALIAS or linking in other packages breaks.

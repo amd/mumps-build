@@ -1,7 +1,8 @@
 name: intel-oneapi
 
 env:
-  CMAKE_BUILD_TYPE: Release
+  CC: icx
+  FC: ifx
 
 on:
   push:
@@ -14,19 +15,20 @@ on:
       - "**.cmake"
       - "**/CMakeLists.txt"
       - ".github/workflows/intel-oneapi.yml"
-
+      - "!scripts/*"
 
 jobs:
 
-  linux-intel-oneapi:
+  linux:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      CC: icx
-      FC: ifx
+
+    strategy:
+      matrix:
+        int64: [true, false]
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
 
     - name: Intel Apt repository
       timeout-minutes: 1
@@ -39,18 +41,38 @@ jobs:
 
     - name: Install Intel oneAPI
       timeout-minutes: 5
-      run: sudo apt-get install intel-oneapi-compiler-fortran intel-oneapi-compiler-dpcpp-cpp-and-cpp-classic intel-oneapi-mpi intel-oneapi-mpi-devel intel-oneapi-mkl intel-oneapi-mkl-devel ninja-build
+      run: sudo apt-get install intel-oneapi-compiler-fortran intel-oneapi-compiler-dpcpp-cpp-and-cpp-classic intel-oneapi-mpi intel-oneapi-mpi-devel intel-oneapi-mkl intel-oneapi-mkl-devel
 
     - name: Setup Intel oneAPI environment
       run: |
         source /opt/intel/oneapi/setvars.sh
         printenv >> $GITHUB_ENV
 
-    - name: CMake Configure
-      run: cmake -B build
+    - name: CMake Configure intsize64=${{ matrix.int64 }}
+      run: cmake -B build -Dintsize64=${{ matrix.int64 }} -DCMAKE_INSTALL_PREFIX=${{ runner.temp }}
+
+    - name: print config log
+      if: ${{ failure() }}
+      run: cat build/CMakeFiles/CMakeError.log
 
     - name: CMake build
-      run: cmake --build build
+      run: cmake --build build --parallel || cmake --build example/build -v
 
     - name: unit test
       run: ctest --test-dir build --preset default --output-junit test-unit-oneapi.xml
+
+    - name: install package
+      run: cmake --install build
+
+    - name: configure example
+      run: cmake -S example -B example/build -DCMAKE_PREFIX_PATH=${{ runner.temp }}
+
+    - name: print config log
+      if: ${{ failure() }}
+      run: cat example/build/CMakeFiles/CMakeError.log
+
+    - name: build example
+      run: cmake --build example/build --parallel || cmake --build example/build -v
+
+    - name: test example
+      run: ctest --test-dir example/build -V

@@ -2,6 +2,7 @@ name: ci
 
 env:
   CMAKE_BUILD_TYPE: Release
+  HOMEBREW_NO_INSTALL_CLEANUP: 1
 
 on:
   push:
@@ -14,38 +15,103 @@ on:
       - "**.cmake"
       - "**.txt"
       - ".github/workflows/ci.yml"
-
+      - "!scripts/*"
 
 jobs:
 
-  cmakeScotchMetis:
-    runs-on: ubuntu-latest
+  core:
+    timeout-minutes: 15
+
+    strategy:
+      matrix:
+        scotch: [false]
+        int64: [true, false]
+        shared: [true, false]
+        img: [ {os: ubuntu-latest, cmd: sudo apt update && sudo apt install --no-install-recommends libopenmpi-dev openmpi-bin liblapack-dev libscalapack-mpi-dev},
+               {os: macos-latest, cmd: brew install lapack scalapack open-mpi && brew reinstall gcc}
+        ]
+        exclude:
+          - shared: true
+            img: {os: macos-latest}
+          - shared: true
+            int64: true
+          # exclude shared: just saving ci resources
+        include:
+          - scotch: true
+            shared: false
+            int64: false
+            img: {os: ubuntu-latest, cmd: sudo apt update && sudo apt install --no-install-recommends libopenmpi-dev openmpi-bin liblapack-dev libscalapack-mpi-dev}
+
+
+    runs-on: ${{ matrix.img.os }}
+
     steps:
-    - uses: actions/checkout@v2
+
+    - name: Setup cmake
+      if: runner.os == 'Linux' && !${{ matrix.scotch }}
+      uses: jwlawson/actions-setup-cmake@v1
+      with:
+        cmake-version: '3.19'
+
+    - name: Install prereqs
+      run: ${{ matrix.img.cmd }}
+
+    - uses: actions/checkout@v3
+
+    - name: Build scotch
+      if: ${{ matrix.scotch }}
+      run: |
+        cmake -S scripts -B scripts/build -DCMAKE_INSTALL_PREFIX=${{ runner.temp }}
+        cmake --build scripts/build -t scotch --parallel
+
+    - name: configure int64=${{ matrix.int64 }} shared=${{ matrix.shared }}
+      run: cmake -B build -Darith=d -DCMAKE_PREFIX_PATH=${{ runner.temp}} -DCMAKE_INSTALL_PREFIX=${{ runner.temp }} -Dscotch:BOOL=${{ matrix.scotch }} -DBUILD_SHARED_LIBS:BOOL=${{ matrix.shared }} -Dintsize64:BOOL=${{ matrix.int64 }}
+
+    - name: build release
+      run: cmake --build build --parallel
+
+    - name: test release
+      run: ctest --test-dir build --preset default
+
+    - name: install package
+      run: cmake --install build
+
+    - name: configure example
+      run: cmake -S example -B example/build -DCMAKE_PREFIX_PATH:PATH=${{ runner.temp }} -DBUILD_SHARED_LIBS:BOOL=${{ matrix.shared }}
+
+    - name: build example
+      run: cmake --build example/build --parallel || cmake --build example/build -v
+
+    - name: test example
+      run: ctest --test-dir example/build -V
+
+
+  linux-build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
 
     - name: Install prereqs
       run: |
-        sudo apt update -yq
-        sudo apt install -yq --no-install-recommends ninja-build gfortran libopenmpi-dev openmpi-bin liblapack-dev libscalapack-mpi-dev libmetis-dev libscotch-dev
+        sudo apt update
+        sudo apt install --no-install-recommends libopenmpi-dev openmpi-bin
 
-    - run: cmake -B build -Darith=d -Dscotch:BOOL=true --install-prefix=${HOME}
-    - run: cmake --build build
+    - name: configure lapack, scalapack
+      run: cmake -S scripts -B scripts/build -Darith=d --install-prefix=${{ runner.temp }}
+    - name: build,install lapack, scalapack
+      run: cmake --build scripts/build --parallel
+
+    - run: cmake -B build -Darith=d --install-prefix=${{ runner.temp }} -DCMAKE_PREFIX_PATH:PATH=${{ runner.temp }}
+    - run: cmake --build build --parallel
     - run: ctest --test-dir build --preset default
 
     - run: cmake --install build
 
-  mumps_intsize64:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v2
-
-    - name: Install prereqs
-      run: |
-        sudo apt update -yq
-        sudo apt install -yq --no-install-recommends ninja-build gfortran libopenmpi-dev openmpi-bin liblapack-dev libscalapack-mpi-dev
-
-    - run: cmake -B build -Dintsize64:BOOL=yes -Darith=d
-    - run: cmake --build build
-    - run: ctest --test-dir build --preset default
-
-    - run: cmake --install build
+# builds fine on local machine
+    # - name: configure example
+    #   run: cmake -S example -B example/build -DCMAKE_PREFIX_PATH:PATH=${{ runner.temp }} -DBUILD_SHARED_LIBS:BOOL=${{ matrix.shared }}
+    # - name: build example
+    #   run: cmake --build example/build --parallel || cmake --build example/build -v
+    # - name: test example
+    #   run: ctest --test-dir example/build -V

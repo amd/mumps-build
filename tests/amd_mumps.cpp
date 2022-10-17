@@ -1,7 +1,7 @@
 /*
     MIT License
 
-    Copyright (c) <2021> Advanced Micro Devices, Inc. All rights reserved
+    Copyright (c) 2021-2022 Advanced Micro Devices, Inc. All rights reserved
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"), to deal
@@ -54,19 +54,31 @@
 # include  <chrono>
 using ns = std::chrono::nanoseconds;
 using get_time = std::chrono::steady_clock;
-
-int main(int argc, char* argv[]) {
-
-    if (argc != 3) //checks the amount of CL args
+void print_help()
+{
+    printf("Usage: amd_aocl.exe <input mtx file> <symmetry_type> <enable_perf_mode> <performance_iterations>\n");
+    printf("\t input mtx file: input matrix in Matrix Market Format");
+    printf("\t symmetry_type = symmetricity of the input matrix\n");
+    printf("\t\t0: A is unsymmetric\n");
+    printf("\t\t1: A is SPD\n");
+    printf("\t\t2: A is general symmetric\n");
+    printf("\t enable_perf_mode");
+    printf("\t\t0 = for functional tests, >1 = perf runs)\n");
+    printf("\t iterations to run: number of hot calls for performance runs\n");
+    return;
+}
+int main(int argc, char* argv[]) 
+{
+    if (argc != 5) //checks the amount of CL args
     {
-        printf("Usage: amd_aocl.exe <input mtx file> <symmetry_type>\n");
-		printf("\t symmetry_type = 0: A is unsymmetric\n");
-		printf("\t symmetry_type = 1: A is SPD\n");
-		printf("\t symmetry_type = 2: A is general symmetric\n");
+        print_help();
         return 1;
     }
+    
     const std::string matrix_name = argv[1];
     const int symVal = atoi(argv[2]);
+    const int enable_perf_mode = atoi(argv[3]);
+    const int number_hot_calls = atoi(argv[4]);    
     std::string fileline;
     std::vector<std::string> vecstrng;
     char* filechar;
@@ -233,7 +245,6 @@ int main(int argc, char* argv[]) {
     // ---------------------------------------------
     //   Symbolic Factorization
     // ---------------------------------------------     
-    auto SymbolicFactorizationTimeBegin = get_time::now();
     id.job = 1; /* performs the analysis */
 #ifdef VERBOSE_OUTPUT
     printf("Start Mumps Analysis, JOB Id = %d\n", id.job);
@@ -254,12 +265,9 @@ int main(int argc, char* argv[]) {
     printf("End Mumps Analysis\n");
     fflush(stdout);
 #endif
-    auto SymbolicFactorizationTime = get_time::now() - SymbolicFactorizationTimeBegin;
-
     // ---------------------------------------------
     //   Numeric Factorization
     // ---------------------------------------------
-    auto NumericFactorizationTimeBegin = get_time::now();
     id.job = 2; /* performs the factorization */
 #ifdef VERBOSE_OUTPUT
     printf("Start Mumps Factorization, JOB Id = %d\n", id.job);
@@ -280,12 +288,10 @@ int main(int argc, char* argv[]) {
     printf("End Mumps Factorization\n");
     fflush(stdout);
 #endif
-    auto NumericFactorizationTime = get_time::now() - NumericFactorizationTimeBegin;
 
     // ---------------------------------------------
     //   Back substitution
     // ---------------------------------------------
-    auto FBSolveTimeBegin = get_time::now();
     id.job = 3; /* computes the solution */
 #ifdef VERBOSE_OUTPUT
     printf("Start Mumps Solution, JOB Id = %d\n", id.job);
@@ -306,8 +312,80 @@ int main(int argc, char* argv[]) {
     printf("End Mumps Solution\n");
     fflush(stdout);
 #endif
+    // ---------------------------------------------
+    //  Configure Hot calls / Cold Calls
+    // --------------------------------------------
+    const int number_cold_calls = 5;    
+    std::chrono::duration<double, std::nano> analysis_time, factorization_time, solution_time;
+    if(enable_perf_mode)
+    {
+        // ---------------------------------------------
+        //  Configure Hot calls / Cold Calls - Ends
+        // --------------------------------------------
 
-    auto FBSolveTime = get_time::now() - FBSolveTimeBegin;
+        // ---------------------------------------------
+        //  Performance Mode - Warmp up
+        // --------------------------------------------
+        for(int q=0; q<number_cold_calls;q++)
+        {    
+            id.job = 1;     /* performs the analysis */
+            dmumps_c(&id);     
+        }
+        for(int q=0; q<number_cold_calls;q++)
+        {    
+            id.job = 2;     /* performs the factorization */
+            dmumps_c(&id);     
+        }
+        for(int q=0; q<number_cold_calls;q++)
+        {    
+            id.job = 3;     /* performs the solution */
+            dmumps_c(&id);     
+        }    
+        // ---------------------------------------------
+        //  Performance Mode - Warmp up Ends
+        // --------------------------------------------
+
+
+        // ---------------------------------------------
+        //  Performance Mode - Hot calls
+        // --------------------------------------------
+
+        // ---------------------------------------------
+        //   Analysis
+        // ---------------------------------------------  
+        auto t1 = get_time::now();
+        for(int q=0; q<number_hot_calls;q++)
+        {    
+            id.job = 1;     /* performs the analysis */
+            dmumps_c(&id);     
+        }
+        analysis_time = (get_time::now() - t1)/number_hot_calls;
+
+        // ---------------------------------------------
+        //   Factorization
+        // ---------------------------------------------    
+        auto t2 = get_time::now();
+        for(int q=0; q<number_hot_calls;q++)
+        {    
+            id.job = 2; /* performs the factorization */    
+            dmumps_c(&id);     
+        }
+        factorization_time = (get_time::now() - t2)/number_hot_calls;
+        // ---------------------------------------------
+        //   Solution
+        // ---------------------------------------------                
+        auto t3 = get_time::now();
+        for(int q=0; q<number_hot_calls;q++)
+        {    
+            id.job = 3; /* computes the solution */
+            dmumps_c(&id);     
+        }
+        solution_time = (get_time::now() - t3)/number_hot_calls;
+        // ---------------------------------------------
+        //  Performance Mode Ends
+        // --------------------------------------------
+    }
+
     // ---------------------------------------------
     //   Termination and release of memory.
     // ---------------------------------------------
@@ -331,6 +409,7 @@ int main(int argc, char* argv[]) {
     printf("End Mumps Termination\n");
     fflush(stdout);
 #endif
+
     free(irn);
     free(jcn);
     free(aa);
@@ -354,15 +433,15 @@ int main(int argc, char* argv[]) {
     {
         int ompNumThrds = omp_get_max_threads();
         double sparsity_percent = 0.0;
-        double symbolic_t = 0.0, numeric_t = 0.0, solve_t = 0.0, afs_t = 0.0, fs_t = 0.0;
+        double analysis_t = 0.0, factor_t = 0.0, solve_t = 0.0, afs_t = 0.0, fs_t = 0.0;
         sparsity_percent = (nrows * nrows) - nnz;
         sparsity_percent = sparsity_percent / (nrows * nrows);
         sparsity_percent = sparsity_percent * 100;
-        symbolic_t = std::chrono::duration_cast<ns>(SymbolicFactorizationTime).count() / 1.0e9;
-        numeric_t = std::chrono::duration_cast<ns>(NumericFactorizationTime).count() / 1.0e9;
-        solve_t = std::chrono::duration_cast<ns>(FBSolveTime).count() / 1.0e9;
-        afs_t = std::chrono::duration_cast<ns>(SymbolicFactorizationTime + NumericFactorizationTime + FBSolveTime).count() / 1.0e9;
-        fs_t = std::chrono::duration_cast<ns>(NumericFactorizationTime + FBSolveTime).count() / 1.0e9;
+        analysis_t = std::chrono::duration_cast<ns>(analysis_time).count() / 1.0e9;
+        factor_t = std::chrono::duration_cast<ns>(factorization_time).count() / 1.0e9;
+        solve_t = std::chrono::duration_cast<ns>(solution_time).count() / 1.0e9;
+        afs_t = std::chrono::duration_cast<ns>(analysis_time + factorization_time + solution_time).count() / 1.0e9;
+        fs_t = std::chrono::duration_cast<ns>(factorization_time + solution_time).count() / 1.0e9;
 #ifdef PARAM_LOG
     std::cout.precision(2);
     std::cout.setf(std::ios::fixed);
@@ -386,8 +465,8 @@ int main(int argc, char* argv[]) {
             << std::setw(12) << nnz
 	        << std::setw(12) << comm_size 
             << std::setw(12) << sparsity_percent 
-            << std::setw(16) << std::scientific << symbolic_t
-	        << std::setw(16) << std::scientific << numeric_t
+            << std::setw(16) << std::scientific << analysis_t
+	        << std::setw(16) << std::scientific << factor_t
 	        << std::setw(16) << std::scientific << solve_t 
             << std::setw(16) << std::scientific << afs_t 
             << std::setw(16) << std::scientific << fs_t
@@ -395,7 +474,7 @@ int main(int argc, char* argv[]) {
 #else
         //input, mpiProcs, ompThrds, symmetry, nrows, nnz, sparsity_%, analysis_time, fact_time, solve_t, afs_time, fs_time, relError
         printf("%s, %d, %d, %d, %d, %d, %5.2f, %5.2f, %5.2f, %5.2f, %5.2f, %5.2f, %5.2f\n", matrix_name.c_str(), comm_size, ompNumThrds, id.sym, nrows, nnz, sparsity_percent,
-            symbolic_t, numeric_t, solve_t, afs_t, fs_t, relativeError);
+            analysis_t, factor_t, solve_t, afs_t, fs_t, relativeError);
 #endif
     }
 
