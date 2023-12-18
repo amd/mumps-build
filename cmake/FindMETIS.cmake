@@ -1,7 +1,7 @@
 # Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
 # file Copyright.txt or https://cmake.org/licensing for details.
 
-# Modifications Copyright (c) 2021-2022 Advanced Micro Devices, Inc. All rights reserved
+# Modifications Copyright (c) 2021-2024 Advanced Micro Devices, Inc. All rights reserved
 
 #[=======================================================================[.rst:
 FindMETIS
@@ -31,7 +31,7 @@ METIS_INCLUDE_DIRS
 if(parallel IN_LIST METIS_FIND_COMPONENTS)
   find_library(PARMETIS_LIBRARY
     NAMES parmetis
-    HINTS ${USER_PROVIDED_METIS_LIBRARY_PATH}
+    HINTS ${USER_PROVIDED_METIS_LIBRARY_PATH}    
     DOC "ParMETIS library"
     )
   if(PARMETIS_LIBRARY)
@@ -39,11 +39,15 @@ if(parallel IN_LIST METIS_FIND_COMPONENTS)
   endif()
 endif()
 
-find_library(METIS_LIBRARY
+find_library(
+  METIS_LIBRARY
   NAMES metis
   HINTS ${USER_PROVIDED_METIS_LIBRARY_PATH}
-  DOC "METIS library"
-  )
+  PATH_SUFFIXES "lib/${ILP_DIR}/shared" "lib/${ILP_DIR}" "lib_${ILP_DIR}" "lib"
+  DOC "External Metis library")
+if(NOT METIS_LIBRARY)
+  message(FATAL_ERROR "Metis library not found")
+endif()    
 
 if(parallel IN_LIST METIS_FIND_COMPONENTS)
   set(metis_inc parmetis.h)
@@ -51,16 +55,20 @@ else()
   set(metis_inc metis.h)
 endif()
 
-find_path(METIS_INCLUDE_DIR
-NAMES ${metis_inc}
-HINTS ${USER_PROVIDED_METIS_INCLUDE_PATH}
-DOC "METIS include directory"
-)
+find_path(
+  METIS_INCLUDE_DIR
+  NAMES ${metis_inc}
+  HINTS ${USER_PROVIDED_METIS_INCLUDE_PATH}
+  PATH_SUFFIXES "include/${ILP_DIR}" "include_${ILP_DIR}" "include"
+  DOC "External Metis headers")
+if(NOT METIS_INCLUDE_DIR)
+  message(FATAL_ERROR "Metis Headers not found")
+endif()    
 
 configure_file(
   ${METIS_INCLUDE_DIR}/${metis_inc}
   ${CMAKE_SOURCE_DIR}/include/${metis_inc} @ONLY)
-
+  
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(METIS
 REQUIRED_VARS METIS_LIBRARY METIS_INCLUDE_DIR
@@ -82,4 +90,7 @@ if(NOT TARGET METIS::METIS)
 endif()
 endif(METIS_FOUND)
 
+message(STATUS "Dependencies (libraries and includes)")
+message(STATUS "  \$METIS LIBRARY......${METIS_LIBRARY}")
+message(STATUS "  \$METIS Headers......${METIS_INCLUDE_DIR}")
 mark_as_advanced(METIS_INCLUDE_DIR METIS_LIBRARY PARMETIS_LIBRARY)

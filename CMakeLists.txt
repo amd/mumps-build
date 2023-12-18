@@ -1,6 +1,6 @@
 # MIT License
 #  
-# Copyright (c) 2021-2022 Advanced Micro Devices, Inc. All rights reserved
+# Copyright (c) 2021-2024 Advanced Micro Devices, Inc. All rights reserved
 #  
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -20,7 +20,12 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-cmake_minimum_required(VERSION 3.13...3.25)
+cmake_minimum_required(VERSION 3.19...3.27)
+
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
+  message(FATAL_ERROR "Please use out of source build:
+  cmake -B build")
+endif()
 
 get_property(is_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
 if(NOT is_multi_config AND NOT (CMAKE_BUILD_TYPE OR DEFINED ENV{CMAKE_BUILD_TYPE}))
@@ -29,7 +34,7 @@ endif()
 
 project(MUMPS
 LANGUAGES C CXX Fortran
-VERSION 5.5.1.7
+VERSION 5.6.2.2
 DESCRIPTION "Sparse direct parallel solver"
 HOMEPAGE_URL "http://mumps-solver.org/"
 )
@@ -41,9 +46,8 @@ else()
   set(${PROJECT_NAME}_BUILD_TESTING true)
 endif()
 
-message(STATUS "MUMPS_UPSTREAM_VERSION = ${MUMPS_UPSTREAM_VERSION}")
 if(NOT MUMPS_UPSTREAM_VERSION)
-  set(MUMPS_UPSTREAM_VERSION 5.5.1)
+  set(MUMPS_UPSTREAM_VERSION 5.6.2)
 endif()
 
 if(MSVC AND BUILD_SHARED_LIBS)
@@ -55,18 +59,31 @@ endif()
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS true)
 
 # --- user options
-include(cmake/options.cmake)
+include(options.cmake)
 include(cmake/compilers.cmake)
-
 
 # --- download MUMPS source
 include(cmake/mumps_src.cmake)
 
+message(STATUS "${PROJECT_NAME} ${PROJECT_VERSION} upstream ${MUMPS_UPSTREAM_VERSION} install prefix: ${CMAKE_INSTALL_PREFIX}")
+message(STATUS "CMake ${CMAKE_VERSION}  Toolchain ${CMAKE_TOOLCHAIN_FILE}")
+
 # --- dependencies
 find_package(Threads)
 
-include(cmake/FindLAPACK.cmake)
+# --- setup AOCL_ROOT(if defined)
+if(DEFINED ENV{AOCL_ROOT})
+  set(AOCL_ROOT $ENV{AOCL_ROOT})
+endif()
+# --- define AOCL ILP Directory
+if(intsize64)
+  set(ILP_DIR "ILP64")
+else(intsize64)
+  set(ILP_DIR "LP64")
+endif(intsize64)
 
+# --- BLAS AND LAPACK Dependencies
+include(cmake/FindLAPACK.cmake)     
 if(intsize64)
    add_definitions("-DInt=__int64" "-Dintsize64" "-DUInt=unsigned __int64" "-i8")
    find_library(IMPI_LIB_ILP64
@@ -82,67 +99,75 @@ ENDIF(intsize64)
 if(parallel)
   find_package(MPI COMPONENTS C Fortran REQUIRED)
   include(cmake/FindSCALAPACK.cmake)
-
   set(NUMERIC_LIBS ${SCALAPACK_LIBRARIES} ${LAPACK_LIBRARIES})
 
   if(find_static AND NOT WIN32 AND
-    MKL IN_LIST LAPACK_COMPONENTS AND
+    MKL IN_LIST LAPACK_VENDOR AND
     CMAKE_VERSION VERSION_GREATER_EQUAL 3.24
     )
     set(NUMERIC_LIBS $<LINK_GROUP:RESCAN,${NUMERIC_LIBS}>)
   endif()
 
   # avoid MPICH -fallow flag leakage
-  set(NUMERIC_INC ${SCALAPACK_INCLUDE_DIRS} ${LAPACK_INCLUDE_DIRS} ${MPI_Fortran_INCLUDE_DIRS})
+  set(NUMERIC_INC ${MPI_Fortran_INCLUDE_DIRS})
   list(APPEND NUMERIC_LIBS ${MPI_Fortran_LIBRARIES} MPI::MPI_C)
 
   if(openmp)
     find_package(OpenMP COMPONENTS C Fortran REQUIRED)
     list(APPEND NUMERIC_LIBS OpenMP::OpenMP_Fortran OpenMP::OpenMP_C)
   endif()
+else()
+  include(cmake/lapack.cmake)
 endif()
 
 # --- ordering libs
 
 set(ORDERING_LIBS)
 set(ORDERING_DEFS pord)
+
 if(scotch)
+  find_package(Scotch COMPONENTS ESMUMPS REQUIRED)
+  list(APPEND ORDERING_DEFS scotch)
+  list(APPEND ORDERING_LIBS Scotch::Scotch)
+endif()
+
+if(parmetis)
+  find_package(METIS REQUIRED COMPONENTS parallel)
+  list(APPEND ORDERING_DEFS parmetis metis)
+  list(APPEND ORDERING_LIBS METIS::METIS)
+elseif(metis)
   include(cmake/FindMETIS.cmake)
   list(APPEND ORDERING_DEFS metis)
-  list(APPEND ORDERING_LIBS METIS::METIS)
+  list(APPEND ORDERING_LIBS METIS::METIS)  
 endif()
+
 list(APPEND ORDERING_LIBS pord)
 
-message(STATUS "ORDERING_FLAGS = ${ORDERING_FLAGS}")
-message(STATUS "ORDERING_LIBS = ${ORDERING_LIBS}")
-message(STATUS "End of Linking Ordering Lib(PORD)")
+message(STATUS "MUMPS ORDERING_DEFS: ${ORDERING_DEFS}")
+message(STATUS "MUMPS ORDERING_LIBS: ${ORDERING_LIBS}")
 
 # --- MUMPS build
-message(STATUS "mumps_SOURCE_DIR = ${mumps_SOURCE_DIR}")
 
+# --- mpiseq (No MPI)
 if(NOT parallel)
-  configure_file(libseq/CMakeLists.txt ${mumps_SOURCE_DIR}/libseq/ COPYONLY)
-  add_subdirectory(${mumps_SOURCE_DIR}/libseq ${mumps_BINARY_DIR}/libseq)
+  include(cmake/libseq.cmake)
   set(NUMERIC_LIBS mpiseq LAPACK::LAPACK)
 endif()
 
 list(APPEND NUMERIC_LIBS ${CMAKE_THREAD_LIBS_INIT})
 
+# --- PORD (always used)
+include(cmake/pord.cmake)
 
-configure_file(pord/lib/CMakeLists.txt ${mumps_SOURCE_DIR}/PORD/lib/ COPYONLY)
-add_subdirectory(${mumps_SOURCE_DIR}/PORD/lib ${mumps_BINARY_DIR}/pord/lib)
-
-configure_file(src/CMakeLists.txt ${mumps_SOURCE_DIR}/src/ COPYONLY)
-add_subdirectory(${mumps_SOURCE_DIR}/src ${mumps_BINARY_DIR}/src)
+# --- MUMPS itself
+include(cmake/mumps.cmake)
 
 if(matlab OR octave)
-  configure_file(matlab/CMakeLists.txt ${mumps_SOURCE_DIR}/MATLAB/ COPYONLY)
-  add_subdirectory(${mumps_SOURCE_DIR}/MATLAB ${mumps_BINARY_DIR}/matlab)
+  include(cmake/matlab.cmake)
 endif()
 
-
 if(${PROJECT_NAME}_BUILD_TESTING)
-  add_subdirectory(tests)
+  add_subdirectory(test)
 endif()
 
 
@@ -153,3 +178,5 @@ message(STATUS "Configured MUMPS ${MUMPS_UPSTREAM_VERSION} source in ${mumps_SOU
 include(cmake/summary.cmake)
 
 include(cmake/install.cmake)
+
+file(GENERATE OUTPUT .gitignore CONTENT "*")

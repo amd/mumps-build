@@ -443,6 +443,7 @@ int main(int argc, char* argv[])
         afs_t = std::chrono::duration_cast<ns>(analysis_time + factorization_time + solution_time).count() / 1.0e9;
         fs_t = std::chrono::duration_cast<ns>(factorization_time + solution_time).count() / 1.0e9;
 #ifdef PARAM_LOG
+    std::cout << std::endl;  
     std::cout.precision(2);
     std::cout.setf(std::ios::fixed);
     std::cout.setf(std::ios::left);
@@ -451,6 +452,7 @@ int main(int argc, char* argv[])
             << std::setw(12) << "N" 
             << std::setw(12) << "nnz"
 	        << std::setw(12) << "mpi_ranks" 
+            << std::setw(12) << "omp_thrds" 
             << std::setw(12) << "sparsity_%" 
             << std::setw(16) << "analysis_time" 
             << std::setw(16) << "fact_time" 
@@ -464,6 +466,7 @@ int main(int argc, char* argv[])
             << std::setw(12) << ncols 
             << std::setw(12) << nnz
 	        << std::setw(12) << comm_size 
+            << std::setw(12) << ompNumThrds 
             << std::setw(12) << sparsity_percent 
             << std::setw(16) << std::scientific << analysis_t
 	        << std::setw(16) << std::scientific << factor_t

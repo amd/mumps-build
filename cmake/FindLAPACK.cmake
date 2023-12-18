@@ -1,7 +1,7 @@
 # Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
 # file Copyright.txt or https://cmake.org/licensing for details.
 
-# Modifications Copyright (c) 2021-2022 Advanced Micro Devices, Inc. All rights reserved
+# Modifications Copyright (c) 2021-2024 Advanced Micro Devices, Inc. All rights reserved
 
 #[=======================================================================[.rst:
 
@@ -35,13 +35,13 @@ Parameters
 COMPONENTS default to Netlib LAPACK / LapackE, otherwise:
 
 ``MKL``
-  Intel MKL for MSVC, ICL, ICC, GCC and PGCC -- sequential by default, or add TBB or MPI as well
-``OpenMP``
-  Intel MPI with OpenMP threading addition to MKL
-``TBB``
-  Intel MPI + TBB for MKL
+  Intel MKL -- sequential by default, or add TBB or MPI as well
 ``MKL64``
   MKL only: 64-bit integers  (default is 32-bit integers)
+``TBB``
+  Intel MPI + TBB for MKL
+``AOCL``
+  AMD Optimizing CPU Libraries
 
 ``LAPACKE``
   Netlib LapackE for C / C++
@@ -220,28 +220,22 @@ endfunction(netlib_libs)
 function(openblas_libs)
 
 find_library(LAPACK_LIBRARY
-NAMES lapack
+NAMES openblas
 PATH_SUFFIXES openblas
-DOC "LAPACK library"
-)
-
-find_library(BLAS_LIBRARY
-NAMES openblas blas
-NAMES_PER_DIR
-PATH_SUFFIXES openblas
-DOC "BLAS library"
+DOC "OpenBLAS library"
 )
 
 find_path(LAPACK_INCLUDE_DIR
-NAMES cblas-openblas.h cblas.h f77blas.h openblas_config.h
-DOC "LAPACK include directory"
+NAMES openblas_config.h cblas-openblas.h
+DOC "OpenBLAS include directory"
 )
 
-if(NOT (LAPACK_LIBRARY AND BLAS_LIBRARY))
+if(NOT LAPACK_LIBRARY)
   return()
 endif()
 
-list(APPEND LAPACK_LIBRARY ${BLAS_LIBRARY})
+set(BLAS_LIBRARY ${LAPACK_LIBRARY} CACHE FILEPATH "OpenBLAS library")
+
 set(LAPACK_OpenBLAS_FOUND true PARENT_SCOPE)
 
 list(APPEND LAPACK_LIBRARY ${CMAKE_THREAD_LIBS_INIT})
@@ -250,110 +244,198 @@ set(LAPACK_LIBRARY ${LAPACK_LIBRARY} PARENT_SCOPE)
 
 endfunction(openblas_libs)
 
+
 #===============================
 
 function(aocl_libs)
-# AOCL: Include LAPACK(LibFlame) and dependent (Blis) Libraries
-message(STATUS "start of finding LibFlame Library")
+  if(WIN32)
+      set(CMAKE_FIND_LIBRARY_PREFIXES "")
+      set(CMAKE_FIND_LIBRARY_SUFFIXES ".lib")
+      set(_blas_library "AOCL-LibBlis-Win")
+      set(_flame_library "AOCL-LibFlame-Win")
+      set(_utils_library "libaoclutils")
+      set(_static_tag "static")
+      set(_mt_tag "MT")
 
-find_library(LAPACK_LIBRARY
-  NAMES AOCL-LibFLAME-Win-MT-dll AOCL-LibFLAME-Win
-  HINTS ${USER_PROVIDED_LAPACK_LIBRARY_PATH})
-message(STATUS "End of finding LibFlame Library: ${LAPACK_LIBRARY}")
+      # Always use Multi Threaded
+      if(openmp)
+        set(_blas_static_library "${_blas_library}-${_mt_tag}")
+        set(_blas_dyn_library "${_blas_static_library}-dll")
+        set(_flame_static_library "${_flame_library}-${_mt_tag}")
+        set(_flame_dyn_library "${_flame_static_library}-dll")
+      else(openmp)
+        set(_blas_static_library "${_blas_library}")
+        set(_blas_dyn_library "${_blas_static_library}-dll")
+        set(_flame_static_library "${_flame_library}")
+        set(_flame_dyn_library "${_flame_static_library}-dll")
+      endif(openmp)
 
-if(NOT LAPACK_LIBRARY)
-  message(FATAL_ERROR "LibFlame library not found")
-endif()
+      set(_utils_static_library "${_utils_library}_${_static_tag}")
+      set(_utils_dyn_library "${_utils_library}")
+    else(WIN32)
+      set(CMAKE_FIND_LIBRARY_PREFIXES "lib")
+      # No strict static-to-static and shared-to-shared library linking enforced for dependent libraries
+      # CMAKE_FIND_LIBRARY_SUFFIXES which decides the library suffix(.so or .a) is not set based on BUILD_SHARED_LIBS
+      set(_blas_library "blis")
+      set(_flame_library "flame")
+      set(_mt_tag "mt")
+      set(_utils_static_library "aoclutils")
+      set(_utils_dyn_library "aoclutils")
 
-message(STATUS "start of finding Blis Library")
-find_library(BLAS_LIBRARY
-  NAMES AOCL-LibBlis-Win-MT-dll
-  HINTS ${USER_PROVIDED_BLIS_LIBRARY_PATH})
-message(STATUS "End of finding Blis Library: ${BLAS_LIBRARY}")
-if(NOT BLAS_LIBRARY)
-  message(FATAL_ERROR "Blis library not found")
-endif()
+      # Always use Multi Threaded
+      if(openmp)
+        set(_blas_static_library "${_blas_library}-${_mt_tag}")
+        set(_blas_dyn_library "${_blas_library}-${_mt_tag}")
+        set(_flame_static_library "${_flame_library}")
+        set(_flame_dyn_library "${_flame_library}")
+      else(openmp)
+        set(_blas_static_library "${_blas_library}")
+        set(_blas_dyn_library "${_blas_library}")
+        set(_flame_static_library "${_flame_library}")
+        set(_flame_dyn_library "${_flame_library}")
+      endif(openmp)
+    endif(WIN32)
+    # Link against dynamic library by default
+    find_library(
+      AOCL_UTILS_LIB
+      NAMES ${_utils_dyn_library} ${_utils_static_library} NAMES_PER_DIR
+      HINTS ${USER_PROVIDED_UTILS_LIBRARY_PATH} ${AOCL_ROOT}/utils ${AOCL_ROOT}/amd-utils ${AOCL_ROOT}
+      PATH_SUFFIXES "lib/${ILP_DIR}" "lib_${ILP_DIR}" "lib"
+      DOC "AOCL Utils library")
 
-message(STATUS "start of finding Includes path to Blis and Libflame")
-find_path(LAPACK_INCLUDE_DIR
-  NAMES FLAME.h
-  HINTS ${USER_PROVIDED_LAPACK_INCLUDE_PATH})
+    find_library(
+      AOCL_BLIS_LIB
+      NAMES ${_blas_dyn_library} ${_blas_static_library}
+      HINTS ${USER_PROVIDED_BLIS_LIBRARY_PATH} ${AOCL_ROOT}/blis ${AOCL_ROOT}/amd-blis ${AOCL_ROOT} 
+      PATH_SUFFIXES "lib/${ILP_DIR}" "lib_${ILP_DIR}" "lib"
+      DOC "AOCL Blis library")
 
-find_path(BLAS_INCLUDE_DIR
-  NAMES blis.h
-  HINTS ${USER_PROVIDED_BLIS_INCLUDE_PATH})
+    find_library(
+      AOCL_LIBFLAME
+      NAMES ${_flame_dyn_library} ${_flame_static_library} NAMES_PER_DIR
+      HINTS ${USER_PROVIDED_LAPACK_LIBRARY_PATH} ${AOCL_ROOT}/libflame ${AOCL_ROOT}/amd-libflame ${AOCL_ROOT}
+      PATH_SUFFIXES "lib/${ILP_DIR}" "lib_${ILP_DIR}" "lib"
+      DOC "AOCL LIBFLAME library")    
+    # ====Headers
+    find_path(
+      AOCL_UTILS_INCLUDE_DIR
+      NAMES alci_c.h alci.h arch.h cache.h enum.h macros.h
+      HINTS ${USER_PROVIDED_UTILS_INCLUDE_PATH} ${AOCL_ROOT}/amd-utils ${AOCL_ROOT}/utils ${AOCL_ROOT}
+      PATH_SUFFIXES "include/${ILP_DIR}/alci" "include_${ILP_DIR}/alci"
+                    "include/alci"
+      DOC "AOCL Utils headers")
 
-list(APPEND LAPACK_INCLUDE_DIR ${BLAS_INCLUDE_DIR})
+    find_path(
+      AOCL_BLIS_INCLUDE_DIR
+      NAMES blis.h cblas.h blis.hh cblas.hh
+      HINTS ${USER_PROVIDED_BLIS_INCLUDE_PATH} ${AOCL_ROOT}/amd-blis ${AOCL_ROOT}/blis ${AOCL_ROOT}
+      PATH_SUFFIXES "include/${ILP_DIR}" "include_${ILP_DIR}" "include"
+                    "include/blis"
+      DOC "AOCL Blis headers")
+    find_path(
+      AOCL_LIBFLAME_INCLUDE_DIR
+      NAMES FLAME.h lapacke.h lapacke_mangling.h lapack.h libflame.hh
+            libflame_interface.hh
+      HINTS ${USER_PROVIDED_LAPACK_INCLUDE_PATH} ${AOCL_ROOT}/libflame ${AOCL_ROOT}/amd-libflame ${AOCL_ROOT}
+      PATH_SUFFIXES "include/${ILP_DIR}" "include_${ILP_DIR}" "include"
+      DOC "AOCL Libflame headers")      
+    # ===========
+    if(AOCL_BLIS_LIB
+      AND AOCL_LIBFLAME
+      AND AOCL_BLIS_INCLUDE_DIR
+      AND AOCL_LIBFLAME_INCLUDE_DIR
+      AND AOCL_UTILS_LIB
+      AND AOCL_UTILS_INCLUDE_DIR)
+      set(LAPACK_AoclLibs_FOUND
+          true
+          PARENT_SCOPE)
+      set(LAPACK_LIBRARY ${AOCL_LIBFLAME} ${AOCL_BLIS_LIB} ${AOCL_UTILS_LIB})
+      list(APPEND LAPACK_LIBRARY ${CMAKE_THREAD_LIBS_INIT})
+      set(LAPACK_INCLUDE_DIR ${AOCL_LIBFLAME_INCLUDE_DIR} ${AOCL_BLIS_INCLUDE_DIR} ${AOCL_UTILS_INCLUDE_DIR})
+    else()
+      if(NOT AOCL_LIBFLAME)
+        message(STATUS "Info: could not find a suitable installation of Blas Library in \$USER_PROVIDED_LAPACK_LIBRARY_PATH=${USER_PROVIDED_LAPACK_LIBRARY_PATH}")
+      endif()
+      if(NOT AOCL_BLIS_LIB)
+        message(STATUS "Info: could not find a suitable installation of Blas Library in \$USER_PROVIDED_BLIS_LIBRARY_PATH=${USER_PROVIDED_BLIS_LIBRARY_PATH}")
+      endif()
+      if(NOT AOCL_UTILS_LIB)
+        message(STATUS "Info: could not find a suitable installation of Blas Library in \$USER_PROVIDED_UTILS_LIBRARY_PATH=${USER_PROVIDED_UTILS_LIBRARY_PATH}")
+      endif()
 
-message(STATUS "End of finding Includes path to Blis and Libflame: ${LAPACK_INCLUDE_DIR}")
-if(NOT LAPACK_INCLUDE_DIR)
-  message(FATAL_ERROR "Includes path to Blis and Libflame not found")
-endif()
+      if(NOT AOCL_LIBFLAME_INCLUDE_DIR)
+        message(STATUS "Info: could not find a suitable installation of Blas Library in \$USER_PROVIDED_LAPACK_INCLUDE_PATH=${USER_PROVIDED_LAPACK_INCLUDE_PATH}")
+      endif()
+      if(NOT AOCL_BLIS_INCLUDE_DIR)
+        message(STATUS "Info: could not find a suitable installation of Blas Library in \$USER_PROVIDED_BLIS_INCLUDE_PATH=${USER_PROVIDED_BLIS_INCLUDE_PATH}")
+      endif()
+      if(NOT AOCL_UTILS_INCLUDE_DIR)
+        message(STATUS "Info: could not find a suitable installation of Blas Library in \$USER_PROVIDED_UTILS_INCLUDE_PATH=${USER_PROVIDED_UTILS_INCLUDE_PATH}")
+      endif()
+      message(
+        FATAL_ERROR
+          "Error: could not find a suitable installation of Blas/Lapack/Utils Libraries"
+      )
+    endif()
+    set(LAPACK_LIBRARY ${LAPACK_LIBRARY} PARENT_SCOPE)
+    set(LAPACK_INCLUDE_DIR ${LAPACK_INCLUDE_DIR} PARENT_SCOPE)         
 
-if(NOT (LAPACK_LIBRARY AND BLAS_LIBRARY))
-  message(FATAL_ERROR "Blis, Libflame not found")
-  return()
-endif()
-
-list(APPEND LAPACK_LIBRARY ${BLAS_LIBRARY})
-set(LAPACK_AoclLibs_FOUND true PARENT_SCOPE)
-
-list(APPEND LAPACK_LIBRARY ${CMAKE_THREAD_LIBS_INIT})
-
-set(LAPACK_LIBRARY ${LAPACK_LIBRARY} PARENT_SCOPE)
-set(LAPACK_INCLUDE_DIR ${LAPACK_INCLUDE_DIR} PARENT_SCOPE)
-
+    message(STATUS "Dependencies (libraries and includes)")
+    message(STATUS "  \$AOCL LAPACK LIBRARY......${AOCL_LIBFLAME}")
+    message(STATUS "  \$AOCL BLAS LIBRARY......${AOCL_BLIS_LIB}")
+    message(STATUS "  \$AOCL Utils LIBRARY......${AOCL_UTILS_LIB}")
+    message(STATUS "  \$LAPACK Headers...${AOCL_LIBFLAME_INCLUDE_DIR}")
+    message(STATUS "  \$BLAS Headers.....${AOCL_BLIS_INCLUDE_DIR}")
+    message(STATUS "  \$Utils Headers....${AOCL_UTILS_INCLUDE_DIR}")      
 endfunction(aocl_libs)
 
 #===============================
-function(find_mkl_libs)
-# https://software.intel.com/en-us/articles/intel-mkl-link-line-advisor
 
-set(_mkl_libs ${ARGV})
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
-  CMAKE_Fortran_COMPILER_ID STREQUAL "GNU"
-)
-  list(INSERT _mkl_libs 0 mkl_gf_${_mkl_bitflag}lp64)
-else()
-  if(WIN32 AND BUILD_SHARED_LIBS)
-    list(INSERT _mkl_libs 0 mkl_intel_${_mkl_bitflag}lp64_dll)
-  else()
-    list(INSERT _mkl_libs 0 mkl_intel_${_mkl_bitflag}lp64)
-  endif()
+macro(find_mkl_libs)
+# https://www.intel.com/content/www/us/en/docs/onemkl/developer-guide-linux/2023-2/cmake-config-for-onemkl.html
+
+set(MKL_INTERFACE "lp64")
+if(MKL64 IN_LIST LAPACK_FIND_COMPONENTS)
+  string(PREPEND MKL_INTERFACE "i")
 endif()
 
-foreach(s ${_mkl_libs})
-  find_library(LAPACK_${s}_LIBRARY
-  NAMES ${s}
-  PATHS ${MKLROOT}/lib ${MKLROOT}/lib/intel64 ${oneapi_libdir}
-  NO_DEFAULT_PATH
-  DOC "Intel MKL ${s} library"
-  )
-  # ${MKLROOT}/[lib[/intel64]]: general MKL libraries
-  # oneapi_libdir: openmp library
+if(LAPACK95 IN_LIST LAPACK_FIND_COMPONENTS)
+  set(ENABLE_BLAS95 true)
+  set(ENABLE_LAPACK95 true)
+endif()
 
-  if(NOT LAPACK_${s}_LIBRARY)
-    return()
-  endif()
+# MKL_THREADING default: "intel_thread" which is Intel OpenMP
+if(TBB IN_LIST LAPACK_FIND_COMPONENTS)
+  set(MKL_THREADING "tbb_thread")
+endif()
 
-  list(APPEND LAPACK_LIBRARY ${LAPACK_${s}_LIBRARY})
-endforeach()
+# default: dynamic
+if(STATIC IN_LIST LAPACK_FIND_COMPONENTS)
+  set(MKL_LINK "static")
+endif()
 
-find_path(LAPACK_INCLUDE_DIR
-NAMES mkl_lapack.h
-HINTS ${MKLROOT}
-PATH_SUFFIXES include
-NO_DEFAULT_PATH
-DOC "Intel MKL header"
-)
+find_package(MKL CONFIG HINTS $ENV{MKLROOT})
 
-if(NOT LAPACK_INCLUDE_DIR)
+if(NOT MKL_FOUND)
   return()
 endif()
 
-set(LAPACK_LIBRARY ${LAPACK_LIBRARY} PARENT_SCOPE)
+# get_property(LAPACK_COMPILE_OPTIONS TARGET MKL::MKL PROPERTY INTERFACE_COMPILE_OPTIONS)
+# flags are empty generator expressions that trip up check_source_compiles
 
-endfunction(find_mkl_libs)
+get_property(LAPACK_INCLUDE_DIR TARGET MKL::MKL PROPERTY INTERFACE_INCLUDE_DIRECTORIES)
+get_property(LAPACK_LIBRARY TARGET MKL::MKL PROPERTY INTERFACE_LINK_LIBRARIES)
+
+
+set(LAPACK_MKL_FOUND true)
+
+foreach(c IN ITEMS TBB LAPACK95 MKL64)
+  if(${c} IN_LIST LAPACK_FIND_COMPONENTS)
+    set(LAPACK_${c}_FOUND true)
+  endif()
+endforeach()
+
+endmacro(find_mkl_libs)
 
 # ========== main program
 
@@ -366,17 +448,16 @@ if(NOT (lapack_cray
   OR OpenBLAS IN_LIST LAPACK_FIND_COMPONENTS
   OR Netlib IN_LIST LAPACK_FIND_COMPONENTS
   OR Atlas IN_LIST LAPACK_FIND_COMPONENTS
-  OR AoclLibs IN_LIST LAPACK_FIND_COMPONENTS
-  OR MKL IN_LIST LAPACK_FIND_COMPONENTS))
+  OR MKL IN_LIST LAPACK_FIND_COMPONENTS
+  OR AoclLibs IN_LIST LAPACK_FIND_COMPONENTS))
   if(ENABLE_MKL)
-    message(STATUS "MKLROOT ENV defined")
-    list(APPEND LAPACK_FIND_COMPONENTS MKL)
-    if(intsize64)
-      list(APPEND LAPACK_FIND_COMPONENTS MKL64)
-    endif(intsize64)
-  else()
-    list(APPEND LAPACK_FIND_COMPONENTS AoclLibs)
-  endif()
+      list(APPEND LAPACK_FIND_COMPONENTS MKL)
+      if(intsize64)
+        list(APPEND LAPACK_FIND_COMPONENTS MKL64)
+      endif(intsize64)
+    else()
+      list(APPEND LAPACK_FIND_COMPONENTS AoclLibs)
+    endif()
 endif()
 
 find_package(Threads)
@@ -386,87 +467,8 @@ if(STATIC IN_LIST LAPACK_FIND_COMPONENTS)
   set(CMAKE_FIND_LIBRARY_SUFFIXES ${CMAKE_STATIC_LIBRARY_SUFFIX})
 endif()
 
-# ==== generic MKL variables ====
-
 if(MKL IN_LIST LAPACK_FIND_COMPONENTS OR MKL64 IN_LIST LAPACK_FIND_COMPONENTS)
-  # we have to sanitize MKLROOT if it has Windows backslashes (\) otherwise it will break at build time
-  # double-quotes are necessary per CMake to_cmake_path docs.
-  file(TO_CMAKE_PATH "$ENV{MKLROOT}" MKLROOT)
-
-  file(TO_CMAKE_PATH "$ENV{ONEAPI_ROOT}" ONEAPI_ROOT)
-  # oneapi_libdir is where iomp5 is located
-  set(oneapi_libdir ${ONEAPI_ROOT}/compiler/latest/)
-  if(WIN32)
-    string(APPEND oneapi_libdir "windows/compiler/lib/intel64_win")
-  elseif(APPLE)
-    string(APPEND oneapi_libdir "mac/compiler/lib")
-  elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    string(APPEND oneapi_libdir "linux/compiler/lib/intel64_lin")
-  endif()
-
-  if(MKL64 IN_LIST LAPACK_FIND_COMPONENTS)
-    set(_mkl_bitflag i)
-  else()
-    set(_mkl_bitflag)
-  endif()
-
-  set(_mkl_libs)
-  if(LAPACK95 IN_LIST LAPACK_FIND_COMPONENTS)
-    find_mkl_libs(mkl_blas95_${_mkl_bitflag}lp64 mkl_lapack95_${_mkl_bitflag}lp64)
-    if(LAPACK_LIBRARY)
-      set(LAPACK95_LIBRARY ${LAPACK_LIBRARY})
-      set(LAPACK_LIBRARY)
-      set(LAPACK95_INCLUDE_DIR ${LAPACK_INCLUDE_DIR})
-      set(LAPACK_LAPACK95_FOUND true)
-    endif()
-  endif()
-
-  set(_tbb)
-  if(TBB IN_LIST LAPACK_FIND_COMPONENTS)
-    list(APPEND _mkl_libs mkl_tbb_thread mkl_core)
-    set(_tbb tbb stdc++)
-  elseif(OpenMP IN_LIST LAPACK_FIND_COMPONENTS)
-    if(WIN32)
-      set(_mp libiomp5md)
-    else()
-      set(_mp iomp5)
-    endif()
-    if(WIN32 AND BUILD_SHARED_LIBS)
-      list(APPEND _mkl_libs mkl_intel_thread_dll mkl_core_dll ${_mp})
-    else()
-      list(APPEND _mkl_libs mkl_intel_thread mkl_core ${_mp})
-    endif()
-  else()
-    if(WIN32 AND BUILD_SHARED_LIBS)
-      list(APPEND _mkl_libs mkl_sequential_dll mkl_core_dll)
-    else()
-      list(APPEND _mkl_libs mkl_sequential mkl_core)
-    endif()
-  endif()
-
-  find_mkl_libs(${_mkl_libs})
-
-  if(LAPACK_LIBRARY)
-
-    if(NOT WIN32)
-      list(APPEND LAPACK_LIBRARY ${_tbb} ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS} m)
-    endif()
-
-    set(LAPACK_MKL_FOUND true)
-
-    if(MKL64 IN_LIST LAPACK_FIND_COMPONENTS)
-      set(LAPACK_MKL64_FOUND true)
-    endif()
-
-    if(OpenMP IN_LIST LAPACK_FIND_COMPONENTS)
-      set(LAPACK_OpenMP_FOUND true)
-    endif()
-
-    if(TBB IN_LIST LAPACK_FIND_COMPONENTS)
-      set(LAPACK_TBB_FOUND true)
-    endif()
-  endif()
-
+  find_mkl_libs()
 elseif(Atlas IN_LIST LAPACK_FIND_COMPONENTS)
   atlas_libs()
 elseif(Netlib IN_LIST LAPACK_FIND_COMPONENTS)
@@ -474,7 +476,7 @@ elseif(Netlib IN_LIST LAPACK_FIND_COMPONENTS)
 elseif(OpenBLAS IN_LIST LAPACK_FIND_COMPONENTS)
   openblas_libs()
 elseif(AoclLibs IN_LIST LAPACK_FIND_COMPONENTS)
-  aocl_libs()    
+  aocl_libs()   
 elseif(lapack_cray)
   # LAPACK is implicitly part of Cray PE LibSci, use Cray compiler wrapper.
 endif()
@@ -528,21 +530,17 @@ if(LAPACK_s_FOUND OR LAPACK_d_FOUND)
   set(LAPACK_links true PARENT_SCOPE)
 endif()
 
-message(STATUS "after lapack check func LAPACK_links = ${LAPACK_links}")
 message(STATUS "End of Lapack Check function")
 
 endfunction(lapack_check)
 
-# --- Check that Scalapack links
-
+# --- Check library links
 if(lapack_cray OR LAPACK_LIBRARY)
   lapack_check()
 endif()
 
 
 include(FindPackageHandleStandardArgs)
-message(STATUS "Start of Finding Package Handler")
-message(STATUS "LAPACK_LIBRARY = ${LAPACK_LIBRARY}")
 message(STATUS "LAPACK_links = ${LAPACK_links}")
 if(lapack_cray)
   find_package_handle_standard_args(LAPACK HANDLE_COMPONENTS
@@ -553,20 +551,12 @@ else()
   REQUIRED_VARS LAPACK_LIBRARY LAPACK_links
   )
 endif()
-message(STATUS "End of Finding Package Handler: ${LAPACK_FOUND}")
 
 set(BLAS_LIBRARIES ${BLAS_LIBRARY})
 set(LAPACK_LIBRARIES ${LAPACK_LIBRARY})
 set(LAPACK_INCLUDE_DIRS ${LAPACK_INCLUDE_DIR})
-
-message(STATUS "Status of Lapack Found Variable: ${LAPACK_FOUND}")
 if(LAPACK_FOUND)
 # need if _FOUND guard as can't overwrite imported target even if bad
-
-
-message(VERBOSE "Lapack libraries: ${LAPACK_LIBRARIES}
-Lapack include directories: ${LAPACK_INCLUDE_DIRS}")
-
 if(NOT TARGET BLAS::BLAS)
   add_library(BLAS::BLAS INTERFACE IMPORTED)
   set_property(TARGET BLAS::BLAS PROPERTY INTERFACE_LINK_LIBRARIES "${BLAS_LIBRARY}")
@@ -574,6 +564,7 @@ endif()
 
 if(NOT TARGET LAPACK::LAPACK)
   add_library(LAPACK::LAPACK INTERFACE IMPORTED)
+  set_property(TARGET LAPACK::LAPACK PROPERTY INTERFACE_COMPILE_OPTIONS "${LAPACK_COMPILE_OPTIONS}")
   set_property(TARGET LAPACK::LAPACK PROPERTY INTERFACE_LINK_LIBRARIES "${LAPACK_LIBRARY}")
   set_property(TARGET LAPACK::LAPACK PROPERTY INTERFACE_INCLUDE_DIRECTORIES "${LAPACK_INCLUDE_DIR}")
 endif()
@@ -590,5 +581,9 @@ if(LAPACK_LAPACK95_FOUND)
 endif()
 
 endif(LAPACK_FOUND)
+
+message(STATUS "Dependencies (libraries and includes)")
+message(STATUS "  \$LAPACK LIBRARIES......${LAPACK_LIBRARY}")
+message(STATUS "  \$LAPACK_INCLUDE_DIRS...${LAPACK_INCLUDE_DIRS}")
 
 mark_as_advanced(LAPACK_LIBRARY LAPACK_INCLUDE_DIR)

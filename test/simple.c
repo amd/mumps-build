@@ -21,12 +21,7 @@
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
     THE SOFTWARE.
 */
-/*
- *
- *  This file is part of MUMPS 5.2.1, released
- *  on Fri Jun 14 14:46:05 UTC 2019
- *
- */
+
 /* Example program using the C interface to the
  * double real arithmetic version of MUMPS, dmumps_c.
  * We solve the system A x = RHS with
@@ -38,15 +33,14 @@
 #include "mpi.h"
 #include "dmumps_c.h"
 
-#define JOB_INIT -1
-#define JOB_END -2
-#define USE_COMM_WORLD -987654
-
 #define INIT_ERROR_CHECK
 #define ANALYSE_ERROR_CHECK
 #define FACT_ERROR_CHECK
 #define SOLUTION_ERROR_CHECK
-//#define TERMINATE_ERROR_CHECK
+#define JOB_INIT -1
+#define JOB_END -2
+#define USE_COMM_WORLD -987654
+
 
 int main(int argc, char ** argv)
 {
@@ -58,8 +52,11 @@ int main(int argc, char ** argv)
   double a[2];
   double rhs[2];
 
-  MUMPS_INT ierr;
-  int myid, p;
+/* When compiling with -DINTSIZE64, MUMPS_INT is 64-bit but MPI
+   ilp64 versions may still require standard int for C interface. */
+/* MUMPS_INT myid, ierr; */
+  int myid, ierr;
+  int error = 0;
 
   ierr = MPI_Init(&argc, &argv);
   if (ierr != 0) {
@@ -72,15 +69,16 @@ int main(int argc, char ** argv)
   rhs[0]=1.0;rhs[1]=4.0;
   a[0]=1.0;a[1]=2.0;
 
-    MPI_Errhandler_set(MPI_COMM_WORLD, MPI_ERRORS_RETURN); /* return info about
-      errors */
-    printf("No of Processes = %d, My Rank = %d\n", p, myid);
+  MPI_Errhandler_set(MPI_COMM_WORLD, MPI_ERRORS_RETURN); /* return info about
+    errors */
+  printf("No of Processes = %d, My Rank = %d\n", p, myid);
+  
   /* Initialize a MUMPS instance. Use MPI_COMM_WORLD */
   id.comm_fortran=USE_COMM_WORLD;
   id.par=1; id.sym=0;
   id.job=JOB_INIT;
   printf("Start Mumps Init\n");
-  fflush(stdout);
+  fflush(stdout);  
   dmumps_c(&id);
 #ifdef INIT_ERROR_CHECK
   if (id.infog[0] < 0)
@@ -108,10 +106,9 @@ int main(int argc, char ** argv)
 
   /* Call the MUMPS package (analyse, factorization and solve). */
   id.job=1;
+  id.job=1;
   printf("Start Mumps Analyse\n");
-  fflush(stdout);
-  //printf("sizeof(int) = %d\n", sizeof(MUMPS_INT));
-  //fflush(stdout);
+  fflush(stdout);  
   dmumps_c(&id);
 #ifdef ANALYSE_ERROR_CHECK
   if (id.infog[0] < 0)
@@ -164,21 +161,12 @@ int main(int argc, char ** argv)
   }
 #endif
   printf("Done Mumps Solve, infog[0] = %d\n", id.infog[0]);
-  fflush(stdout);
+  fflush(stdout);  
 
-  //printf("Done Mumps Analyse/Fact/Solve\n");
-  //fflush(stdout);
-  /*
-  if (id.infog[0]<0) {
-    fprintf(stderr," (PROC %d) ERROR RETURN: \tINFOG(1)= %d\n\t\t\t\tINFOG(2)= %d\n",
-        myid, id.infog[0], id.infog[1]);
-    return 1;
-  }
-  */
   /* Terminate instance. */
   id.job=JOB_END;
   printf("Start Mumps Termination\n");
-  fflush(stdout);
+  fflush(stdout);  
   dmumps_c(&id);
 #ifdef TERMINATE_ERROR_CHECK
   if (id.infog[0] < 0)
@@ -194,7 +182,7 @@ int main(int argc, char ** argv)
 #endif
   printf("Done Mumps Termination, infog[0] = %d\n", id.infog[0]);
   fflush(stdout);
-
+    
   if (myid == 0) printf("Solution is : (%8.2f  %8.2f)\n", rhs[0],rhs[1]);
   ierr = MPI_Finalize();
   return 0;

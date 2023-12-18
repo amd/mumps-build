@@ -1,7 +1,7 @@
 # Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
 # file Copyright.txt or https://cmake.org/licensing for details.
 
-# Modifications Copyright (c) 2021-2022 Advanced Micro Devices, Inc. All rights reserved
+# Modifications Copyright (c) 2021-2024 Advanced Micro Devices, Inc. All rights reserved
 
 #[=======================================================================[.rst:
 
@@ -60,17 +60,8 @@ set(SCALAPACK_LIBRARY)  # avoids appending to prior FindScalapack
 
 function(scalapack_check)
 
-if(NOT (MPI_C_FOUND AND MPI_Fortran_FOUND))
-  find_package(MPI COMPONENTS C Fortran)
-endif()
-
-if(NOT LAPACK_FOUND)
-  # otherwise can cause 32-bit lapack when 64-bit wanted
-  find_package(LAPACK)
-endif()
-if(NOT (MPI_Fortran_FOUND AND LAPACK_FOUND))
-  return()
-endif()
+# some OpenMPI builds need -pthread
+find_package(Threads)
 
 
 set(CMAKE_REQUIRED_FLAGS)
@@ -80,7 +71,7 @@ set(CMAKE_REQUIRED_LIBRARIES ${SCALAPACK_LIBRARY})
 if(BLACS_LIBRARY)
   list(APPEND CMAKE_REQUIRED_LIBRARIES ${BLACS_LIBRARY})
 endif()
-list(APPEND CMAKE_REQUIRED_LIBRARIES ${LAPACK_LIBRARIES} ${MPI_Fortran_LIBRARIES})
+list(APPEND CMAKE_REQUIRED_LIBRARIES ${LAPACK_LIBRARIES} ${MPI_Fortran_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
 
 if(STATIC IN_LIST SCALAPACK_FIND_COMPONENTS AND
   NOT WIN32 AND
@@ -89,7 +80,7 @@ if(STATIC IN_LIST SCALAPACK_FIND_COMPONENTS AND
   )
   set(CMAKE_REQUIRED_LIBRARIES $<LINK_GROUP:RESCAN,${CMAKE_REQUIRED_LIBRARIES}>)
 endif()
-# MPI needed for ifort
+# MPI needed for IntelLLVM
 
 check_fortran_source_compiles(
 "program test
@@ -122,89 +113,63 @@ endif()
 endfunction(scalapack_check)
 
 
-function(scalapack_mkl scalapack_name blacs_name)
+macro(scalapack_mkl)
 
-find_library(SCALAPACK_LIBRARY
-NAMES ${scalapack_name}
-HINTS ${MKLROOT}
-PATH_SUFFIXES lib lib/intel64
-NO_DEFAULT_PATH
-DOC "SCALAPACK library"
-)
+# https://www.intel.com/content/www/us/en/docs/onemkl/developer-guide-linux/2023-2/cmake-config-for-onemkl.html
 
-find_library(BLACS_LIBRARY
-NAMES ${blacs_name}
-HINTS ${MKLROOT}
-PATH_SUFFIXES lib lib/intel64
-NO_DEFAULT_PATH
-DOCS "BLACS library"
-)
+set(ENABLE_SCALAPACK true)
 
-find_path(SCALAPACK_INCLUDE_DIR
-NAMES mkl_scalapack.h
-HINTS ${MKLROOT}
-PATH_SUFFIXES include
-NO_DEFAULT_PATH
-DOC "SCALAPACK include directory"
-)
-
-# pc_mkl_INCLUDE_DIRS on Windows injects breaking garbage
-
-if(SCALAPACK_LIBRARY AND BLACS_LIBRARY AND SCALAPACK_INCLUDE_DIR)
-  set(SCALAPACK_MKL_FOUND true)
-endif()
-
+set(MKL_INTERFACE "lp64")
 if(MKL64 IN_LIST SCALAPACK_FIND_COMPONENTS)
-  set(SCALAPACK_MKL64_FOUND ${SCALAPACK_MKL_FOUND})
-
-  if(DEFINED ENV{I_MPI_ROOT})
-    file(TO_CMAKE_PATH "$ENV{I_MPI_ROOT}" I_MPI_ROOT)
-
-    if(MSVC)
-      set(CMAKE_FIND_LIBRARY_PREFIXES lib)
-    endif()
-
-    find_library(SCALAPACK_MPI_LIB64
-    NAMES mpi_ilp64
-    HINTS ${I_MPI_ROOT}
-    NO_DEFAULT_PATH
-    PATH_SUFFIXES lib lib/release
-    DOC "MPI 64-bit library"
-    )
-
-    if(NOT SCALAPACK_MPI_LIB64)
-      set(SCALAPACK_MKL64_FOUND false)
-    endif()
-  endif()
+  string(PREPEND MKL_INTERFACE "i")
 endif()
 
-set(SCALAPACK_MKL_FOUND ${SCALAPACK_MKL_FOUND} PARENT_SCOPE)
-set(SCALAPACK_MKL64_FOUND ${SCALAPACK_MKL64_FOUND} PARENT_SCOPE)
+# MKL_THREADING default: "intel_thread" which is Intel OpenMP
+if(TBB IN_LIST SCALAPACK_FIND_COMPONENTS)
+  set(MKL_THREADING "tbb_thread")
+endif()
 
-endfunction(scalapack_mkl)
+# default: dynamic
+if(STATIC IN_LIST SCALAPACK_FIND_COMPONENTS)
+  set(MKL_LINK "static")
+endif()
 
-#===============================
-function(scalapack_aocl)
-# AOCL: Include AOCL's Scalapack library
+find_package(MKL CONFIG HINTS $ENV{MKLROOT})
 
-find_library(SCALAPACK_LIBRARY
-  NAMES scalapack
-  HINTS ${CMAKE_SOURCE_DIR}/lib/)
-
-message(STATUS "SCALAPACK_LIBRARY = ${SCALAPACK_LIBRARY}")
-
-if(NOT (SCALAPACK_LIBRARY))
+if(NOT MKL_FOUND)
   return()
 endif()
 
-set(SCALAPACK_AoclLibs_FOUND true PARENT_SCOPE)
+# get_property(SCALAPACK_COMPILE_OPTIONS TARGET MKL::MKL PROPERTY INTERFACE_COMPILE_OPTIONS)
+# flags are empty generator expressions that trip up check_source_compiles
 
-list(APPEND SCALAPACK_LIBRARY ${CMAKE_THREAD_LIBS_INIT})
+get_property(SCALAPACK_INCLUDE_DIR TARGET MKL::MKL PROPERTY INTERFACE_INCLUDE_DIRECTORIES)
+get_property(SCALAPACK_LIBRARY TARGET MKL::MKL PROPERTY INTERFACE_LINK_LIBRARIES)
 
-set(SCALAPACK_LIBRARY ${SCALAPACK_LIBRARY} PARENT_SCOPE)
-set(SCALAPACK_INCLUDE_DIR ${SCALAPACK_INCLUDE_DIR} PARENT_SCOPE)
-message(STATUS "End of AOCL Scalapack Linking")
-endfunction(scalapack_aocl)
+set(SCALAPACK_MKL_FOUND true)
+
+foreach(c IN ITEMS TBB LAPACK95 MKL64)
+  if(${c} IN_LIST SCALAPACK_FIND_COMPONENTS)
+    set(SCALAPACK_${c}_FOUND true)
+  endif()
+endforeach()
+
+
+endmacro(scalapack_mkl)
+
+#===============================
+function(scalapack_aocl_lib)  
+  find_library(
+    SCALAPACK_LIBRARY
+    NAMES scalapack
+    HINTS ${USER_PROVIDED_SCALAPACK_LIBRARY_PATH} ${AOCL_ROOT}/scalapack ${AOCL_ROOT}/amd-scalapack ${AOCL_ROOT} 
+    PATH_SUFFIXES "lib/${ILP_DIR}/shared" "lib/${ILP_DIR}/static" "lib_${ILP_DIR}" "lib"
+    DOC "AOCL Scalapack library")
+  
+  if(NOT SCALAPACK_LIBRARY)
+    message(FATAL_ERROR "Scalapack library not found")
+  endif()  
+endfunction(scalapack_aocl_lib)
 
 # === main
 
@@ -231,40 +196,12 @@ endif()
 
 if(MKL IN_LIST SCALAPACK_FIND_COMPONENTS OR MKL64 IN_LIST SCALAPACK_FIND_COMPONENTS)
   message(STATUS "MKL defined")
-  # we have to sanitize MKLROOT if it has Windows backslashes (\) otherwise it will break at build time
-  # double-quotes are necessary per CMake to_cmake_path docs.
-  file(TO_CMAKE_PATH "$ENV{MKLROOT}" MKLROOT)
-
-  if(MKL64 IN_LIST SCALAPACK_FIND_COMPONENTS)
-    set(_mkl_bitflag i)
-  else()
-    set(_mkl_bitflag)
-  endif()
-
-  # find MKL MPI binding
-  if(WIN32)
-    if(BUILD_SHARED_LIBS)
-      scalapack_mkl(mkl_scalapack_${_mkl_bitflag}lp64_dll mkl_blacs_${_mkl_bitflag}lp64_dll)
-    else()
-      scalapack_mkl(mkl_scalapack_${_mkl_bitflag}lp64 mkl_blacs_intelmpi_${_mkl_bitflag}lp64)
-    endif()
-  elseif(APPLE)
-    scalapack_mkl(mkl_scalapack_${_mkl_bitflag}lp64 mkl_blacs_mpich_${_mkl_bitflag}lp64)
-  else()
-    scalapack_mkl(mkl_scalapack_${_mkl_bitflag}lp64 mkl_blacs_intelmpi_${_mkl_bitflag}lp64)
-  endif()
-
+  scalapack_mkl()
 elseif(scalapack_cray)
   # Cray PE has Scalapack build into LibSci. Use Cray compiler wrapper.
-else()
-  message(STATUS "aocl defined in scalapack: PATH = ${USER_PROVIDED_SCALAPACK_LIBRARY_PATH}")
-  find_library(SCALAPACK_LIBRARY
-    NAMES scalapack
-    NAMES_PER_DIR
-    HINTS ${USER_PROVIDED_SCALAPACK_LIBRARY_PATH}    
-  )
-  message(STATUS "SCALAPACK_LIBRARY : ${SCALAPACK_LIBRARY}")
-
+else()  
+  scalapack_aocl_lib()
+  message(STATUS "SCALAPACK_LIBRARY = ${SCALAPACK_LIBRARY}")
 endif()
 
 if(STATIC IN_LIST SCALAPACK_FIND_COMPONENTS)
@@ -297,7 +234,6 @@ endif()
 if(SCALAPACK_FOUND)
   # need if _FOUND guard as can't overwrite imported target even if bad
   set(SCALAPACK_LIBRARIES ${SCALAPACK_LIBRARY})
-
   set(SCALAPACK_INCLUDE_DIRS ${SCALAPACK_INCLUDE_DIR})
 
   message(VERBOSE "Scalapack libraries: ${SCALAPACK_LIBRARIES}
@@ -307,7 +243,13 @@ Scalapack include directories: ${SCALAPACK_INCLUDE_DIRS}")
     add_library(SCALAPACK::SCALAPACK INTERFACE IMPORTED)
     set_property(TARGET SCALAPACK::SCALAPACK PROPERTY INTERFACE_LINK_LIBRARIES "${SCALAPACK_LIBRARIES}")
     set_property(TARGET SCALAPACK::SCALAPACK PROPERTY INTERFACE_INCLUDE_DIRECTORIES "${SCALAPACK_INCLUDE_DIR}")
+
+    # For MKL, we don't use FindLapack, so define LAPACK::LAPACK as alias
+    if(MKL_FOUND AND NOT TARGET LAPACK::LAPACK)
+      add_library(LAPACK::LAPACK ALIAS SCALAPACK::SCALAPACK)
+    endif()
   endif()
 endif()
-
+message(STATUS "Dependencies (libraries and includes)")
+message(STATUS "  \$SCALPACK LIBRARY......${SCALAPACK_LIBRARY}")
 mark_as_advanced(SCALAPACK_LIBRARY SCALAPACK_INCLUDE_DIR)

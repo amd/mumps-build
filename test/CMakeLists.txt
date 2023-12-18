@@ -20,7 +20,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-# testing what we just built
 
 set(Boost_USE_STATIC_LIBS OFF) 
 set(Boost_USE_MULTITHREADED ON)  
@@ -32,7 +31,7 @@ if(MUMPS_UPSTREAM_VERSION VERSION_LESS 5.1)
   return()
 endif()
 
-if("d" IN_LIST arith)
+if(BUILD_DOUBLE)
 	add_executable(amd_aocl amd_mumps.cpp)
 	target_compile_options(amd_aocl PRIVATE /Qopenmp /Qopenmp-threadprivate:compat -DAdd_)
 	if(intsize64)
