@@ -10,14 +10,9 @@ CMake:
 ## Prerequisites
 1. Cmake and Ninja Makefile Generator. Make sure Ninja is installed/updated in the Microsoft Visual Studio installation folder @ "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja"
 	a. Latest Ninja Binary at https://github.com/ninja-build/ninja/releases/download/v1.10.2/ninja-win.zip
-1. Intel OneAPI toolkit, should include C, C++, Fortran Compilers, MPI, MKL libraries (refer https://software.intel.com/content/www/us/en/develop/articles/oneapi-standalone-components.html#vtune)
-2. Prebuilt AOCL libraries for BLAS, LAPACK and Scalapack
-	a. AOCL-BLAS, AOCL-LAPACK and Scalapack libraries can be built from source or extracted from AOCL_Windows-setup-xxxx-AMD.exe based on integer size needed, LP64 or ILP64. Refer https://developer.amd.com/amd-aocl/ for more details.
-		1. Choose MT Shared libraries for AOCL-BLAS: AOCL-LibBlis-Win-MT-dll.lib and AOCL-LibBlis-Win-MT-dll.dll
-		2. Shared libraries for AOCL-LAPACK: AOCL-LibFlame-Win-MT-dll.lib and AOCL-LibFlame-Win-MT-dll.dll
-	b. LP64/ILP64 libraries of the dependent libraries (AOCL-BLAS, AOCL-LAPACK and Scalapack) need to be linked with the corresponding Mumps LP64/ILP64 builds
-
-3. If reordering library is chosen to be Metis, Prebuilt Metis Library from SuiteSparse public repo (https://github.com/group-gu/SuiteSparse.git). Build Metis library separately from metis folder. 
+2. Intel OneAPI toolkit, should include C, C++, Fortran Compilers, MPI, MKL libraries (refer https://software.intel.com/content/www/us/en/develop/articles/oneapi-standalone-components.html#vtune)
+3. Install AOCL-BLAS, AOCL-LAPACK, AOCL-UTILS and AOCL-SCALAPACK from https://developer.amd.com/amd-aocl/
+4. If reordering library is chosen to be Metis, Prebuilt Metis Library from SuiteSparse public repo (https://github.com/group-gu/SuiteSparse.git). Build Metis library separately from metis folder. 
 	a. cd SuiteSparse\metis-5.1.0
 	b. Define IDXTYPEWIDTH and REALTYPEWIDTH to 32/64 based on integer size required in metis/include/metis.h
 	c. Configure 
@@ -28,12 +23,8 @@ CMake:
 		```
 		cmake --build ninja_build_dir --verbose	
 		```	
-	3. Library metis.lib should be generated at ninja_build_dir\lib
-5. Boost libraries on windows
-	a. Required to read mtx files efficiently and quickly
-	b. Needed for aocl_amd.cpp test application that links to Mumps libraries and measure performance for a SPD .mtx file	
-	c. Download sources and bootstrap as instructed in https://www.boost.org/doc/libs/1_55_0/more/getting_started/windows.html	
-	d. Define BOOST_ROOT in tests/CMakeLists.txt
+	e. Library metis.lib should be generated at ninja_build_dir\lib
+5. If Boost is installed in a local directory or expect CMake configuration to choose a local Boost install instead of system install, then add the following two CMake variables during configuration: "-DCMAKE_PREFIX_PATH=<path to local boost installation> -DBoost_NO_SYSTEM_PATHS=TRUE". Note that "workflow preset" seem to have an issue finding non-system installation of boost at persent.
 
 ## Build
 1. Open Intel oneAPI command prompt for Intel 64 for Visual Studio 2019 from Windows Search box
@@ -87,3 +78,4 @@ CMake:
 1. Cmake Build system will download latest Mumps tar ball by default and proceed with configuration and build generation
 2. Currently Metis Reordering is tested. Disabling the option "-Dscotch=OFF" would enable Mumps's internal reordering. Set the appropriate init parameter before calling MUMPS API in the linking test code
 3. Following MUMPS Versions are supported: 5.4.1, 5.5.0, 5.5.1, 5.6.0, 5.6.1 and 5.6.2
+4. Remove comments (lines starting with '#') from Matrix Market files (*.mtx) before testing them using MUMPS application.

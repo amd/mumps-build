@@ -2,6 +2,7 @@
 # libraries.json file.
 
 include(FetchContent)
+set(FETCHCONTENT_QUIET off)
 
 string(TOLOWER ${PROJECT_NAME}_src name)
 
@@ -57,6 +58,13 @@ message(DEBUG "MUMPS archive source URLs: ${urls}")
 
 set(FETCHCONTENT_QUIET no)
 
+if(NOT CMAKE_EXTERNAL_BUILD_DIR)
+    set(CMAKE_EXTERNAL_BUILD_DIR "./external")
+endif()
+get_filename_component(fc_base ${CMAKE_EXTERNAL_BUILD_DIR}
+                       REALPATH BASE_DIR "${CMAKE_BINARY_DIR}")
+set(FETCHCONTENT_BASE_DIR ${fc_base})
+                       
 FetchContent_Declare(${PROJECT_NAME}
 URL ${urls}
 URL_HASH SHA256=${sha256}

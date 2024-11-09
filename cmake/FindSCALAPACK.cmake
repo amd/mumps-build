@@ -162,7 +162,7 @@ function(scalapack_aocl_lib)
   find_library(
     SCALAPACK_LIBRARY
     NAMES scalapack
-    HINTS ${USER_PROVIDED_SCALAPACK_LIBRARY_PATH} ${AOCL_ROOT}/scalapack ${AOCL_ROOT}/amd-scalapack ${AOCL_ROOT} 
+    HINTS ${USER_PROVIDED_SCALAPACK_LIBRARY_PATH} ${CMAKE_AOCL_ROOT}/scalapack ${CMAKE_AOCL_ROOT}/amd-scalapack ${CMAKE_AOCL_ROOT} 
     PATH_SUFFIXES "lib/${ILP_DIR}/shared" "lib/${ILP_DIR}/static" "lib_${ILP_DIR}" "lib"
     DOC "AOCL Scalapack library")
   

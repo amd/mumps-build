@@ -243,7 +243,7 @@ int main(int argc, char* argv[])
     // ---------------------------------------------
 
     // ---------------------------------------------
-    //   Symbolic Factorization
+    //   Analysis
     // ---------------------------------------------     
     id.job = 1; /* performs the analysis */
 #ifdef VERBOSE_OUTPUT
@@ -290,7 +290,7 @@ int main(int argc, char* argv[])
 #endif
 
     // ---------------------------------------------
-    //   Back substitution
+    //   Solution
     // ---------------------------------------------
     id.job = 3; /* computes the solution */
 #ifdef VERBOSE_OUTPUT
@@ -318,7 +318,7 @@ int main(int argc, char* argv[])
     const int number_cold_calls = 5;    
     std::chrono::duration<double, std::nano> analysis_time, factorization_time, solution_time;
     if(enable_perf_mode)
-    {
+    { 
         // ---------------------------------------------
         //  Configure Hot calls / Cold Calls - Ends
         // --------------------------------------------

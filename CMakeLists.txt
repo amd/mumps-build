@@ -71,10 +71,26 @@ message(STATUS "CMake ${CMAKE_VERSION}  Toolchain ${CMAKE_TOOLCHAIN_FILE}")
 # --- dependencies
 find_package(Threads)
 
-# --- setup AOCL_ROOT(if defined)
-if(DEFINED ENV{AOCL_ROOT})
-  set(AOCL_ROOT $ENV{AOCL_ROOT})
+# Set paths to AOCLUTILS, BLAS and LAPACK installations.
+set(CMAKE_AOCL_ROOT
+    $ENV{AOCL_ROOT}
+    CACHE
+    STRING
+    "AOCL_ROOT directory to be used to find BLAS/LAPACK/AOCLUTILS libraries")
+if(CMAKE_AOCL_ROOT STREQUAL "")
+    message(FATAL_ERROR "CMAKE_AOCL_ROOT is empty. Either set environment variable AOCL_ROOT or set -DCMAKE_AOCL_ROOT=<path_to_AOCL_libs>.")
 endif()
+
+# Set paths to Re-Ordering Library.
+set(CMAKE_METIS_ROOT
+    $ENV{METIS_ROOT}
+    CACHE
+    STRING
+    "METIS_ROOT directory to be used to find ordering(Metis) libraries")
+if(CMAKE_METIS_ROOT STREQUAL "")
+    message(FATAL_ERROR "CMAKE_METIS_ROOT is empty. Either set environment variable METIS_ROOT or set -DCMAKE_METIS_ROOT=<path_to_Metis_ordering_lib>.")
+endif()
+
 # --- define AOCL ILP Directory
 if(intsize64)
   set(ILP_DIR "ILP64")

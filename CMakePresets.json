@@ -1,25 +1,18 @@
 {
-  "version": 3,
-
-"configurePresets": [
-{
-  "name": "phony"
-}
-],
-"testPresets": [
-{
-  "name": "default",
-  "configurePreset": "phony",
-  "output": {
-    "outputOnFailure": true,
-    "verbosity": "default"
+  "version": 6,
+  "cmakeMinimumRequired": {
+   "major": 3,
+   "minor": 26,
+   "patch": 0
   },
-  "execution": {
-    "noTestsAction": "error",
-    "scheduleRandom": true,
-    "stopOnFailure": false,
-    "timeout": 10
-  }
-}
-]
+  "include": [
+    "cmake/presets/base.json",
+    "cmake/presets/win-ninja.json"
+  ],
+  "configurePresets": [
+  ],
+  "buildPresets": [
+  ],
+  "workflowPresets": [
+  ]
 }

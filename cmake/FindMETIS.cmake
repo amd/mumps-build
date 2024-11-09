@@ -42,7 +42,7 @@ endif()
 find_library(
   METIS_LIBRARY
   NAMES metis
-  HINTS ${USER_PROVIDED_METIS_LIBRARY_PATH}
+  HINTS ${USER_PROVIDED_METIS_LIBRARY_PATH} ${CMAKE_METIS_ROOT}/metis ${CMAKE_METIS_ROOT} 
   PATH_SUFFIXES "lib/${ILP_DIR}/shared" "lib/${ILP_DIR}" "lib_${ILP_DIR}" "lib"
   DOC "External Metis library")
 if(NOT METIS_LIBRARY)
@@ -58,7 +58,7 @@ endif()
 find_path(
   METIS_INCLUDE_DIR
   NAMES ${metis_inc}
-  HINTS ${USER_PROVIDED_METIS_INCLUDE_PATH}
+  HINTS ${USER_PROVIDED_METIS_INCLUDE_PATH} ${CMAKE_METIS_ROOT}/metis ${CMAKE_METIS_ROOT}
   PATH_SUFFIXES "include/${ILP_DIR}" "include_${ILP_DIR}" "include"
   DOC "External Metis headers")
 if(NOT METIS_INCLUDE_DIR)
