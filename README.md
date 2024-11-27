@@ -63,7 +63,7 @@ CMake:
 	-DCMAKE_C_COMPILER=“<path/to/intel c compiler>”								<path to Intel C Compiler>
 	-DCMAKE_Fortran_COMPILER=“<path/to/intel fortran compiler>”					<path to Intel Fortran Compiler>
 	-DBOOST_ROOT=“<path/to/BOOST/INSTALLATION>”									<path to Boost libraries/headers>
-	-DMUMPS_UPSTREAM_VERSION="mumps sources version"							<mumps src tarball versions. Tested for 5.4.1, 5.5.0>
+	i-DMUMPS_UPSTREAM_VERSION="mumps sources version"							<mumps src tarball versions. Tested for 5.4.1, 5.5.0, 5.5.1, 5.6.0, 5.6.1, 5.6.2>
 3. AOCL dependencies can also be configured using AOCL_ROOT. Define the environment variable AOCL_ROOT to point to AOCL libs installation
 	```
 	set "AOCL_ROOT=C:\Program Files\AMD\AOCL-Windows"
@@ -86,3 +86,4 @@ CMake:
 ## Note
 1. Cmake Build system will download latest Mumps tar ball by default and proceed with configuration and build generation
 2. Currently Metis Reordering is tested. Disabling the option "-Dscotch=OFF" would enable Mumps's internal reordering. Set the appropriate init parameter before calling MUMPS API in the linking test code
+3. Following MUMPS Versions are supported: 5.4.1, 5.5.0, 5.5.1, 5.6.0, 5.6.1 and 5.6.2
