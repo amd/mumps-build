@@ -7,7 +7,7 @@ set "AOCL_ROOT=<path\\to\\AOCL\\dependencies>"
 set "METIS_ROOT=<path\\to\\METIS\\installation>"
 set "BOOST_ROOT=<path\\to\\Boost\\Headers>"
 set "MKL_IMPI_ILP64_ROOT=<path\\to\\64-bit\\MPI\\MKL\\libraries>"
-set "MUMPS_VERSION=<supported versions of MUMPS: 5.4.1, 5.5.0, 5.5.1, 5.6.0, 5.6.1 and 5.6.2>"
+set "MUMPS_VERSION=<supported versions of MUMPS: 5.5.1, 5.6.0, 5.6.1, 5.6.2, 5.7.0, 5.7.1, 5.7.2, 5.7.3>"
 ```
 # How to list all available CMake-Presets?
 ```

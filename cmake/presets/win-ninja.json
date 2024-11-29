@@ -15,8 +15,7 @@
           "rhs": "Windows"
         },
         "cacheVariables": {
-          "BUILD_TESTING" : "ON",
-          "ENABLE_MKL" : "OFF",          
+          "BUILD_TESTING" : "ON",       
           "CMAKE_VERBOSE_MAKEFILE" : "ON",
           "CMAKE_EXTERNAL_BUILD_DIR": "${sourceDir}/temp/win_ninja",
           "Boost_NO_SYSTEM_PATHS" : "TRUE",              
@@ -25,7 +24,8 @@
           "CMAKE_Fortran_COMPILER" : "ifx.exe",          
           "MUMPS_UPSTREAM_VERSION" : "$env{MUMPS_VERSION}",
           "USER_PROVIDED_IMPILIB_ILP64_PATH" : "$env{MKL_IMPI_ILP64_ROOT}",
-          "CMAKE_PREFIX_PATH" : "$env{BOOST_ROOT}"
+          "CMAKE_PREFIX_PATH" : "$env{BOOST_ROOT}",
+          "CMAKE_MAKE_PROGRAM " : "$env{NINJA_ROOT}"
         }        
       },
       {

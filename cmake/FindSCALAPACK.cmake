@@ -1,7 +1,7 @@
 # Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
 # file Copyright.txt or https://cmake.org/licensing for details.
 
-# Modifications Copyright (c) 2021-2024 Advanced Micro Devices, Inc. All rights reserved
+# Modifications Copyright (c) 2021-2025 Advanced Micro Devices, Inc. All rights reserved
 
 #[=======================================================================[.rst:
 
@@ -157,35 +157,76 @@ endforeach()
 
 endmacro(scalapack_mkl)
 
+function(scalapack_lib)
+
+if(BUILD_SHARED_LIBS)
+  set(_s shared)
+else()
+  set(_s static)
+endif()
+list(APPEND _s openmpi/lib mpich/lib)
+
+find_library(SCALAPACK_LIBRARY
+NAMES scalapack scalapack-openmpi scalapack-mpich
+NAMES_PER_DIR
+PATH_SUFFIXES ${_s}
+DOC "SCALAPACK library"
+)
+
+# some systems have libblacs as a separate file, instead of being subsumed in libscalapack.
+if(NOT DEFINED BLACS_ROOT)
+  cmake_path(GET SCALAPACK_LIBRARY PARENT_PATH BLACS_ROOT)
+endif()
+
+find_library(BLACS_LIBRARY
+NAMES blacs
+NO_DEFAULT_PATH
+HINTS ${BLACS_ROOT}
+DOC "BLACS library"
+)
+
+endfunction(scalapack_lib)
 #===============================
 function(scalapack_aocl_lib)  
+  if(BUILD_SHARED_LIBS)
+    set(lib_type "shared")
+  else(BUILD_SHARED_LIBS)
+    set(lib_type "static")
+  endif(BUILD_SHARED_LIBS) 
+
+  set(SCALAPACK_AOCL_HINT_01 "${CMAKE_AOCL_ROOT}\\amd-scalapack\\lib\\${ILP_DIR}\\${lib_type}")
+  set(SCALAPACK_AOCL_HINT_02 "${CMAKE_AOCL_ROOT}\\amd-scalapack\\lib_${ILP_DIR}\\${lib_type}")
+  set(SCALAPACK_AOCL_HINT_03 "${CMAKE_AOCL_ROOT}\\amd-scalapack\\lib\\${lib_type}") 
+
   find_library(
-    SCALAPACK_LIBRARY
+    AOCL_SCALAPACK
     NAMES scalapack
-    HINTS ${USER_PROVIDED_SCALAPACK_LIBRARY_PATH} ${CMAKE_AOCL_ROOT}/scalapack ${CMAKE_AOCL_ROOT}/amd-scalapack ${CMAKE_AOCL_ROOT} 
-    PATH_SUFFIXES "lib/${ILP_DIR}/shared" "lib/${ILP_DIR}/static" "lib_${ILP_DIR}" "lib"
+    HINTS ${SCALAPACK_AOCL_HINT_01} ${SCALAPACK_AOCL_HINT_02} ${SCALAPACK_AOCL_HINT_03} ${USER_PROVIDED_SCALAPACK_LIBRARY_PATH}
     DOC "AOCL Scalapack library")
-  
-  if(NOT SCALAPACK_LIBRARY)
-    message(FATAL_ERROR "Scalapack library not found")
+
+  if(NOT AOCL_SCALAPACK)
+      message(
+        FATAL_ERROR
+          "Error: could not find a suitable installation of AOCL Scalapack Library in \$CMAKE_AOCL_ROOT=${CMAKE_AOCL_ROOT}"
+      )
   endif()  
+  set(SCALAPACK_FOUND true PARENT_SCOPE)
+  set(SCALAPACK_LIBRARY ${AOCL_SCALAPACK} PARENT_SCOPE)
+  message(STATUS "  \$SCALAPACK LIBRARY......${SCALAPACK_LIBRARY}")  
 endfunction(scalapack_aocl_lib)
 
 # === main
 
-message(STATUS "enter scalapack main")
-
-set(scalapack_cray false)
-if(DEFINED ENV{CRAYPE_VERSION})
-  set(scalapack_cray true)
+if(NOT DEFINED SCALAPACK_CRAY AND DEFINED ENV{CRAYPE_VERSION})
+  set(SCALAPACK_CRAY true)
 endif()
 
-if(NOT scalapack_cray)
-  if(ENABLE_MKL)
-    list(APPEND SCALAPACK_FIND_COMPONENTS MKL)
-    if(intsize64)
-        list(APPEND SCALAPACK_FIND_COMPONENTS MKL64)
-    endif(intsize64)
+if(NOT SCALAPACK_CRAY)
+  if(NOT (MKL IN_LIST SCALAPACK_FIND_COMPONENTS    
+    OR AOCL IN_LIST SCALAPACK_FIND_COMPONENTS))
+      if(DEFINED ENV{MKLROOT} AND IS_DIRECTORY "$ENV{MKLROOT}")
+        list(APPEND SCALAPACK_FIND_COMPONENTS MKL)
+      endif()
   endif()
 endif()
 
@@ -194,14 +235,14 @@ if(STATIC IN_LIST SCALAPACK_FIND_COMPONENTS)
   set(CMAKE_FIND_LIBRARY_SUFFIXES ${CMAKE_STATIC_LIBRARY_SUFFIX})
 endif()
 
-if(MKL IN_LIST SCALAPACK_FIND_COMPONENTS OR MKL64 IN_LIST SCALAPACK_FIND_COMPONENTS)
-  message(STATUS "MKL defined")
-  scalapack_mkl()
-elseif(scalapack_cray)
-  # Cray PE has Scalapack build into LibSci. Use Cray compiler wrapper.
-else()  
+if(AOCL IN_LIST SCALAPACK_FIND_COMPONENTS)
   scalapack_aocl_lib()
-  message(STATUS "SCALAPACK_LIBRARY = ${SCALAPACK_LIBRARY}")
+elseif(MKL IN_LIST SCALAPACK_FIND_COMPONENTS OR MKL64 IN_LIST SCALAPACK_FIND_COMPONENTS)
+  scalapack_mkl()
+elseif(SCALAPACK_CRAY)
+  # Cray PE has Scalapack build into LibSci. Use Cray compiler wrapper.
+else()
+  scalapack_lib()
 endif()
 
 if(STATIC IN_LIST SCALAPACK_FIND_COMPONENTS)
@@ -213,7 +254,7 @@ endif()
 
 # --- Check that Scalapack links
 
-if(scalapack_cray OR SCALAPACK_LIBRARY)
+if(SCALAPACK_CRAY OR SCALAPACK_LIBRARY)
   scalapack_check()
 endif()
 
@@ -221,23 +262,24 @@ endif()
 
 include(FindPackageHandleStandardArgs)
 
-if(scalapack_cray)
+if(SCALAPACK_CRAY)
   find_package_handle_standard_args(SCALAPACK HANDLE_COMPONENTS
   REQUIRED_VARS SCALAPACK_links
   )
-else()
-  find_package_handle_standard_args(SCALAPACK HANDLE_COMPONENTS
-  REQUIRED_VARS SCALAPACK_LIBRARY SCALAPACK_links
-  )
+#else()
+#  find_package_handle_standard_args(SCALAPACK HANDLE_COMPONENTS
+#  REQUIRED_VARS SCALAPACK_LIBRARY SCALAPACK_links
+#  )
 endif()
 
 if(SCALAPACK_FOUND)
   # need if _FOUND guard as can't overwrite imported target even if bad
   set(SCALAPACK_LIBRARIES ${SCALAPACK_LIBRARY})
-  set(SCALAPACK_INCLUDE_DIRS ${SCALAPACK_INCLUDE_DIR})
+  if(BLACS_LIBRARY)
+    list(APPEND SCALAPACK_LIBRARIES ${BLACS_LIBRARY})
+  endif()
 
-  message(VERBOSE "Scalapack libraries: ${SCALAPACK_LIBRARIES}
-Scalapack include directories: ${SCALAPACK_INCLUDE_DIRS}")
+  set(SCALAPACK_INCLUDE_DIRS ${SCALAPACK_INCLUDE_DIR})
 
   if(NOT TARGET SCALAPACK::SCALAPACK)
     add_library(SCALAPACK::SCALAPACK INTERFACE IMPORTED)
@@ -251,5 +293,6 @@ Scalapack include directories: ${SCALAPACK_INCLUDE_DIRS}")
   endif()
 endif()
 message(STATUS "Dependencies (libraries and includes)")
-message(STATUS "  \$SCALPACK LIBRARY......${SCALAPACK_LIBRARY}")
+message(STATUS "  \$SCALAPACK_LIBRARIES......${SCALAPACK_LIBRARIES}")
+message(STATUS "  \$SCALAPACK_INCLUDE_DIRS......${SCALAPACK_INCLUDE_DIRS}")
 mark_as_advanced(SCALAPACK_LIBRARY SCALAPACK_INCLUDE_DIR)

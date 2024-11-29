@@ -1,17 +1,25 @@
-cmake_minimum_required(VERSION 3.19)
+cmake_minimum_required(VERSION 3.20...3.24)
+# at least 3.24 to suppress CMP0135 warning
+
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
+  message(FATAL_ERROR "please use out of source build
+    cmake -Bbuild")
+endif()
 
 project(MumpsPrereqs LANGUAGES C Fortran)
 
 include(ExternalProject)
 
+get_filename_component(CMAKE_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX} ABSOLUTE)
+
 file(MAKE_DIRECTORY ${CMAKE_INSTALL_PREFIX})
 message(STATUS "Installing MUMPS prerequisites to ${CMAKE_INSTALL_PREFIX}")
 
-if(NOT DEFINED arith)
-  set(arith "s;d")
-endif()
-
-set(CMAKE_TLS_VERIFY true)
+option(BUILD_SINGLE "Build single precision real" ON)
+option(BUILD_DOUBLE "Build double precision real" ON)
+option(BUILD_COMPLEX "Build single precision complex")
+option(BUILD_COMPLEX16 "Build double precision complex")
+option(intsize64 "use 64-bit integers in C and Fortran--Scotch must be consistent with MUMPS")
 
 set_property(DIRECTORY PROPERTY EP_UPDATE_DISCONNECTED true)
 
@@ -27,23 +35,24 @@ set(cmake_args
 )
 
 # Lapack
-set(lapack_cmake_args ${cmake_args})
+set(lapack_cmake_args ${cmake_args}
+-DBUILD_SINGLE:BOOL=${BUILD_SINGLE}
+-DBUILD_DOUBLE:BOOL=${BUILD_DOUBLE}
+-DBUILD_COMPLEX:BOOL=${BUILD_COMPLEX}
+-DBUILD_COMPLEX16:BOOL=${BUILD_COMPLEX16}
+)
 
 string(JSON lapack_url GET ${json} lapack git)
-string(JSON lapack_tag GET ${json} lapack tag)
 
 ExternalProject_Add(lapack
-GIT_REPOSITORY ${lapack_url}
-GIT_TAG ${lapack_tag}
-GIT_SHALLOW true
-CMAKE_ARGS ${cmake_args}
-CMAKE_CACHE_ARGS -Darith:STRING=${arith}
-INACTIVITY_TIMEOUT 60
+URL ${lapack_url}
+CMAKE_ARGS ${lapack_cmake_args}
+CONFIGURE_HANDLED_BY_BUILD true
 )
 
 # Scalapack
 
-set(scalapack_cmake_args ${cmake_args})
+set(scalapack_cmake_args ${lapack_cmake_args})
 
 string(JSON scalapack_url GET ${json} scalapack git)
 string(JSON scalapack_tag GET ${json} scalapack tag)
@@ -52,13 +61,16 @@ ExternalProject_Add(scalapack
 GIT_REPOSITORY ${scalapack_url}
 GIT_TAG ${scalapack_tag}
 GIT_SHALLOW true
-CMAKE_ARGS ${cmake_args}
-CMAKE_CACHE_ARGS -Darith:STRING=${arith}
-INACTIVITY_TIMEOUT 60
+CMAKE_ARGS ${scalapack_cmake_args}
 DEPENDS lapack
+CONFIGURE_HANDLED_BY_BUILD true
 )
 
 # METIS
+
+set(metis_cmake_args ${cmake_args}
+-Dintsize=$<IF:$<BOOL:${intsize64}>,64,32>
+)
 
 string(JSON metis_url GET ${json} metis git)
 string(JSON metis_tag GET ${json} metis tag)
@@ -67,8 +79,8 @@ ExternalProject_Add(metis
 GIT_REPOSITORY ${metis_url}
 GIT_TAG ${metis_tag}
 GIT_SHALLOW true
-CMAKE_ARGS ${cmake_args}
-INACTIVITY_TIMEOUT 60
+CMAKE_ARGS ${metis_cmake_args}
+CONFIGURE_HANDLED_BY_BUILD true
 )
 
 # Scotch
@@ -95,7 +107,7 @@ if(NOT bison)
 endif()
 
 message(STATUS "Bison found: ${bison}")
-get_filename_component(bison_root ${bison} DIRECTORY)
+cmake_path(GET bison PARENT_PATH bison_root)
 
 set(BISON_ROOT ${bison_root} PARENT_SCOPE)
 
@@ -103,13 +115,17 @@ endfunction()
 
 bison_homebrew()
 
-
+# https://gitlab.inria.fr/scotch/scotch/-/blob/master/CMakeLists.txt
 set(scotch_cmake_args ${cmake_args}
 -DINSTALL_METIS_HEADERS:BOOL=false
 -DBUILD_LIBSCOTCHMETIS:BOOL=false
+-DBUILD_LIBESMUMPS:BOOL=true
+-DINTSIZE=$<IF:$<BOOL:${intsize64}>,64,32>
 )
+#https://gitlab.inria.fr/scotch/scotch/-/blob/master/src/CMakeLists.txt#L84
+
 if(BISON_ROOT)
-  list(APPEND scotch_cmake_args -DCMAKE_PREFIX_PATH:ROOT=${BISON_ROOT})
+  list(APPEND scotch_cmake_args -DCMAKE_PREFIX_PATH:PATH=${BISON_ROOT})
 endif()
 
 string(JSON scotch_url GET ${json} scotch git)
@@ -120,6 +136,7 @@ GIT_REPOSITORY ${scotch_url}
 GIT_TAG ${scotch_tag}
 GIT_SHALLOW true
 CMAKE_ARGS ${scotch_cmake_args}
-INACTIVITY_TIMEOUT 60
-DEPENDS metis
+CONFIGURE_HANDLED_BY_BUILD true
 )
+
+file(GENERATE OUTPUT .gitignore CONTENT "*")

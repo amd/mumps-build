@@ -1,6 +1,6 @@
 # MIT License
 #  
-# Copyright (c) 2021-2024 Advanced Micro Devices, Inc. All rights reserved
+# Copyright (c) 2021-2025 Advanced Micro Devices, Inc. All rights reserved
 #  
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-cmake_minimum_required(VERSION 3.19...3.27)
+cmake_minimum_required(VERSION 3.20...3.30)
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
   message(FATAL_ERROR "Please use out of source build:
@@ -34,36 +34,31 @@ endif()
 
 project(MUMPS
 LANGUAGES C CXX Fortran
-VERSION 5.6.2.2
+VERSION 5.7.3.1
 DESCRIPTION "Sparse direct parallel solver"
 HOMEPAGE_URL "http://mumps-solver.org/"
 )
 
-enable_testing()
-if(DEFINED BUILD_TESTING)
-  set(${PROJECT_NAME}_BUILD_TESTING ${BUILD_TESTING})
-else()
-  set(${PROJECT_NAME}_BUILD_TESTING true)
+if(CMAKE_VERSION VERSION_GREATER 3.30.0 AND CMAKE_VERSION VERSION_LESS 3.30.4)
+cmake_policy(SET CMP0168 OLD)
+# workaround to stop repeat FetchContent download on each configure for CMake 3.30.0..3.30.3
 endif()
 
+enable_testing()
+
 if(NOT MUMPS_UPSTREAM_VERSION)
-  set(MUMPS_UPSTREAM_VERSION 5.6.2)
+  set(MUMPS_UPSTREAM_VERSION 5.7.3)
 endif()
 
 if(MSVC AND BUILD_SHARED_LIBS)
-  message(WARNING "MUMPS: Windows Intel/IntelLLVM compilers with **shared** libraries is not supported and will probably fail.
+  message(WARNING "MUMPS: Windows IntelLLVM compilers with **shared** libraries is not supported and will probably fail.
   Recommend using static libraries, which does work:
   cmake -DBUILD_SHARED_LIBS=off")
 endif()
 
-set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS true)
-
 # --- user options
 include(options.cmake)
 include(cmake/compilers.cmake)
-
-# --- download MUMPS source
-include(cmake/mumps_src.cmake)
 
 message(STATUS "${PROJECT_NAME} ${PROJECT_VERSION} upstream ${MUMPS_UPSTREAM_VERSION} install prefix: ${CMAKE_INSTALL_PREFIX}")
 message(STATUS "CMake ${CMAKE_VERSION}  Toolchain ${CMAKE_TOOLCHAIN_FILE}")
@@ -91,15 +86,8 @@ if(CMAKE_METIS_ROOT STREQUAL "")
     message(FATAL_ERROR "CMAKE_METIS_ROOT is empty. Either set environment variable METIS_ROOT or set -DCMAKE_METIS_ROOT=<path_to_Metis_ordering_lib>.")
 endif()
 
-# --- define AOCL ILP Directory
-if(intsize64)
-  set(ILP_DIR "ILP64")
-else(intsize64)
-  set(ILP_DIR "LP64")
-endif(intsize64)
 
-# --- BLAS AND LAPACK Dependencies
-include(cmake/FindLAPACK.cmake)     
+# define int64 libraries and flags
 if(intsize64)
    add_definitions("-DInt=__int64" "-Dintsize64" "-DUInt=unsigned __int64" "-i8")
    find_library(IMPI_LIB_ILP64
@@ -110,18 +98,26 @@ else(intsize64)
    unset(IMPI_LIB_ILP64)
 ENDIF(intsize64)
 
+# --- define AOCL ILP Directory
+if(intsize64)
+  set(ILP_DIR "ILP64")
+else(intsize64)
+  set(ILP_DIR "LP64")
+endif(intsize64)
 # -- Scalapack / MPI
 
-if(parallel)
+if(MUMPS_parallel)
   find_package(MPI COMPONENTS C Fortran REQUIRED)
-  include(cmake/FindSCALAPACK.cmake)
-  set(NUMERIC_LIBS ${SCALAPACK_LIBRARIES} ${LAPACK_LIBRARIES})
+  #if(NOT DEFINED ENV{MKLROOT} AND NOT LAPACK_VENDOR MATCHES "^MKL" OR NOT scalapack)
+  if(NOT LAPACK_VENDOR MATCHES "^MKL" OR NOT scalapack)
+    # oneMKL MKLConfig.cmake must be invoked only once
+    include(cmake/lapack.cmake)
+  endif()
+  set(NUMERIC_LIBS LAPACK::LAPACK)
 
-  if(find_static AND NOT WIN32 AND
-    MKL IN_LIST LAPACK_VENDOR AND
-    CMAKE_VERSION VERSION_GREATER_EQUAL 3.24
-    )
-    set(NUMERIC_LIBS $<LINK_GROUP:RESCAN,${NUMERIC_LIBS}>)
+  if(scalapack)
+    include(cmake/scalapack.cmake) # this will also create the LAPACK::LAPACK target
+    list(PREPEND NUMERIC_LIBS SCALAPACK::SCALAPACK)
   endif()
 
   # avoid MPICH -fallow flag leakage
@@ -136,6 +132,11 @@ else()
   include(cmake/lapack.cmake)
 endif()
 
+# GEMMT is recommeded in MUMPS User Manual if available
+if(gemmt)
+  include(cmake/gemmt.cmake)
+endif()
+
 # --- ordering libs
 
 set(ORDERING_LIBS)
@@ -148,26 +149,41 @@ if(scotch)
 endif()
 
 if(parmetis)
-  find_package(METIS REQUIRED COMPONENTS parallel)
+  find_package(METIS REQUIRED COMPONENTS ParMETIS)
   list(APPEND ORDERING_DEFS parmetis metis)
   list(APPEND ORDERING_LIBS METIS::METIS)
 elseif(metis)
-  include(cmake/FindMETIS.cmake)
+  find_package(METIS REQUIRED)
   list(APPEND ORDERING_DEFS metis)
-  list(APPEND ORDERING_LIBS METIS::METIS)  
+  list(APPEND ORDERING_LIBS METIS::METIS)
 endif()
 
 list(APPEND ORDERING_LIBS pord)
 
+install(FILES
+${CMAKE_CURRENT_SOURCE_DIR}/cmake/FindLAPACK.cmake
+${CMAKE_CURRENT_SOURCE_DIR}/cmake/FindSCALAPACK.cmake
+${CMAKE_CURRENT_SOURCE_DIR}/cmake/FindMETIS.cmake
+${CMAKE_CURRENT_SOURCE_DIR}/cmake/FindScotch.cmake
+${CMAKE_CURRENT_SOURCE_DIR}/cmake/FindMUMPS.cmake
+DESTINATION cmake
+)
+
 message(STATUS "MUMPS ORDERING_DEFS: ${ORDERING_DEFS}")
 message(STATUS "MUMPS ORDERING_LIBS: ${ORDERING_LIBS}")
+message(STATUS "MUMPS LAPACK_VENDOR: ${LAPACK_VENDOR}")
+message(STATUS "MUMPS SCALAPACK_VENDOR: ${SCALAPACK_VENDOR}")
+
+# --- download MUMPS source
+include(cmake/mumps_src.cmake)
+message(VERBOSE "fetched mumps sources ...")
 
 # --- MUMPS build
 
 # --- mpiseq (No MPI)
-if(NOT parallel)
+if(NOT MUMPS_parallel)
+  set(NUMERIC_LIBS LAPACK::LAPACK)
   include(cmake/libseq.cmake)
-  set(NUMERIC_LIBS mpiseq LAPACK::LAPACK)
 endif()
 
 list(APPEND NUMERIC_LIBS ${CMAKE_THREAD_LIBS_INIT})
@@ -178,14 +194,14 @@ include(cmake/pord.cmake)
 # --- MUMPS itself
 include(cmake/mumps.cmake)
 
-if(matlab OR octave)
+if(matlab)
   include(cmake/matlab.cmake)
 endif()
+
 
 if(${PROJECT_NAME}_BUILD_TESTING)
   add_subdirectory(test)
 endif()
-
 
 # --- feature summary
 

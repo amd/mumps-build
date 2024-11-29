@@ -1,7 +1,7 @@
 # Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
 # file Copyright.txt or https://cmake.org/licensing for details.
 
-# Modifications Copyright (c) 2021-2024 Advanced Micro Devices, Inc. All rights reserved
+# Modifications Copyright (c) 2021-2025 Advanced Micro Devices, Inc. All rights reserved
 
 #[=======================================================================[.rst:
 
@@ -258,17 +258,10 @@ function(aocl_libs)
       set(_mt_tag "MT")
 
       # Always use Multi Threaded
-      if(openmp)
-        set(_blas_static_library "${_blas_library}-${_mt_tag}")
-        set(_blas_dyn_library "${_blas_static_library}-dll")
-        set(_flame_static_library "${_flame_library}-${_mt_tag}")
-        set(_flame_dyn_library "${_flame_static_library}-dll")
-      else(openmp)
-        set(_blas_static_library "${_blas_library}")
-        set(_blas_dyn_library "${_blas_static_library}-dll")
-        set(_flame_static_library "${_flame_library}")
-        set(_flame_dyn_library "${_flame_static_library}-dll")
-      endif(openmp)
+      set(_blas_static_library "${_blas_library}-${_mt_tag}")
+      set(_blas_dyn_library "${_blas_static_library}-dll")
+      set(_flame_static_library "${_flame_library}-${_mt_tag}")
+      set(_flame_dyn_library "${_flame_static_library}-dll")
 
       set(_utils_static_library "${_utils_library}_${_static_tag}")
       set(_utils_dyn_library "${_utils_library}")
@@ -283,17 +276,10 @@ function(aocl_libs)
       set(_utils_dyn_library "aoclutils")
 
       # Always use Multi Threaded
-      if(openmp)
-        set(_blas_static_library "${_blas_library}-${_mt_tag}")
-        set(_blas_dyn_library "${_blas_library}-${_mt_tag}")
-        set(_flame_static_library "${_flame_library}")
-        set(_flame_dyn_library "${_flame_library}")
-      else(openmp)
-        set(_blas_static_library "${_blas_library}")
-        set(_blas_dyn_library "${_blas_library}")
-        set(_flame_static_library "${_flame_library}")
-        set(_flame_dyn_library "${_flame_library}")
-      endif(openmp)
+      set(_blas_static_library "${_blas_library}-${_mt_tag}")
+      set(_blas_dyn_library "${_blas_library}-${_mt_tag}")
+      set(_flame_static_library "${_flame_library}")
+      set(_flame_dyn_library "${_flame_library}")
     endif(WIN32)
 
     # Link against dynamic library by default
@@ -310,7 +296,7 @@ function(aocl_libs)
       HINTS ${USER_PROVIDED_BLIS_LIBRARY_PATH} ${CMAKE_AOCL_ROOT}/blis ${CMAKE_AOCL_ROOT}/amd-blis ${CMAKE_AOCL_ROOT} 
       PATH_SUFFIXES "lib/${ILP_DIR}" "lib_${ILP_DIR}" "lib"
       DOC "AOCL Blis library")
-
+    
     find_library(
       AOCL_LIBFLAME
       NAMES ${_flame_dyn_library} ${_flame_static_library} NAMES_PER_DIR
@@ -346,10 +332,7 @@ function(aocl_libs)
       AND AOCL_BLIS_INCLUDE_DIR
       AND AOCL_LIBFLAME_INCLUDE_DIR
       AND AOCL_UTILS_LIB
-      AND AOCL_UTILS_INCLUDE_DIR)
-      set(LAPACK_AoclLibs_FOUND
-          true
-          PARENT_SCOPE)
+      AND AOCL_UTILS_INCLUDE_DIR)      
       set(LAPACK_LIBRARY ${AOCL_LIBFLAME} ${AOCL_BLIS_LIB} ${AOCL_UTILS_LIB})
       list(APPEND LAPACK_LIBRARY ${CMAKE_THREAD_LIBS_INIT})
       set(LAPACK_INCLUDE_DIR ${AOCL_LIBFLAME_INCLUDE_DIR} ${AOCL_BLIS_INCLUDE_DIR} ${AOCL_UTILS_INCLUDE_DIR})
@@ -378,6 +361,7 @@ function(aocl_libs)
           "Error: could not find a suitable installation of Blas/Lapack/Utils Libraries"
       )
     endif()
+    set(LAPACK_AOCL_FOUND true PARENT_SCOPE)
     set(LAPACK_LIBRARY ${LAPACK_LIBRARY} PARENT_SCOPE)
     set(LAPACK_INCLUDE_DIR ${LAPACK_INCLUDE_DIR} PARENT_SCOPE)         
 
@@ -439,26 +423,22 @@ endforeach()
 endmacro(find_mkl_libs)
 
 # ========== main program
-
-set(lapack_cray false)
-if(DEFINED ENV{CRAYPE_VERSION})
-  set(lapack_cray true)
+if(NOT DEFINED LAPACK_CRAY AND DEFINED ENV{CRAYPE_VERSION})
+  set(LAPACK_CRAY true)
 endif()
 
-if(NOT (lapack_cray
+if(NOT (LAPACK_CRAY
   OR OpenBLAS IN_LIST LAPACK_FIND_COMPONENTS
   OR Netlib IN_LIST LAPACK_FIND_COMPONENTS
   OR Atlas IN_LIST LAPACK_FIND_COMPONENTS
   OR MKL IN_LIST LAPACK_FIND_COMPONENTS
-  OR AoclLibs IN_LIST LAPACK_FIND_COMPONENTS))
-  if(ENABLE_MKL)
-      list(APPEND LAPACK_FIND_COMPONENTS MKL)
-      if(intsize64)
-        list(APPEND LAPACK_FIND_COMPONENTS MKL64)
-      endif(intsize64)
-    else()
-      list(APPEND LAPACK_FIND_COMPONENTS AoclLibs)
-    endif()
+  OR MKL64 IN_LIST LAPACK_FIND_COMPONENTS
+  OR AOCL IN_LIST LAPACK_FIND_COMPONENTS))
+  if(DEFINED ENV{MKLROOT} AND IS_DIRECTORY "$ENV{MKLROOT}")
+    list(APPEND LAPACK_FIND_COMPONENTS MKL)
+  else()
+    list(APPEND LAPACK_FIND_COMPONENTS Netlib)
+  endif()
 endif()
 
 find_package(Threads)
@@ -468,7 +448,9 @@ if(STATIC IN_LIST LAPACK_FIND_COMPONENTS)
   set(CMAKE_FIND_LIBRARY_SUFFIXES ${CMAKE_STATIC_LIBRARY_SUFFIX})
 endif()
 
-if(MKL IN_LIST LAPACK_FIND_COMPONENTS OR MKL64 IN_LIST LAPACK_FIND_COMPONENTS)
+if(AOCL IN_LIST LAPACK_FIND_COMPONENTS)
+  aocl_libs()
+elseif(MKL IN_LIST LAPACK_FIND_COMPONENTS OR MKL64 IN_LIST LAPACK_FIND_COMPONENTS)
   find_mkl_libs()
 elseif(Atlas IN_LIST LAPACK_FIND_COMPONENTS)
   atlas_libs()
@@ -476,9 +458,7 @@ elseif(Netlib IN_LIST LAPACK_FIND_COMPONENTS)
   netlib_libs()
 elseif(OpenBLAS IN_LIST LAPACK_FIND_COMPONENTS)
   openblas_libs()
-elseif(AoclLibs IN_LIST LAPACK_FIND_COMPONENTS)
-  aocl_libs()   
-elseif(lapack_cray)
+elseif(LAPACK_CRAY)
   # LAPACK is implicitly part of Cray PE LibSci, use Cray compiler wrapper.
 endif()
 
@@ -492,9 +472,8 @@ endif()
 # -- verify library works
 
 function(lapack_check)
-message(STATUS "Start of Lapack Check function")
+
 get_property(enabled_langs GLOBAL PROPERTY ENABLED_LANGUAGES)
-message(STATUS "enabled_langs = ${enabled_langs}")
 if(NOT Fortran IN_LIST enabled_langs)
   set(LAPACK_links true PARENT_SCOPE)
   return()
@@ -531,19 +510,17 @@ if(LAPACK_s_FOUND OR LAPACK_d_FOUND)
   set(LAPACK_links true PARENT_SCOPE)
 endif()
 
-message(STATUS "End of Lapack Check function")
-
 endfunction(lapack_check)
 
 # --- Check library links
-if(lapack_cray OR LAPACK_LIBRARY)
+if(LAPACK_CRAY OR LAPACK_LIBRARY)
   lapack_check()
 endif()
 
 
 include(FindPackageHandleStandardArgs)
-message(STATUS "LAPACK_links = ${LAPACK_links}")
-if(lapack_cray)
+
+if(LAPACK_CRAY)
   find_package_handle_standard_args(LAPACK HANDLE_COMPONENTS
   REQUIRED_VARS LAPACK_links
   )
@@ -584,7 +561,7 @@ endif()
 endif(LAPACK_FOUND)
 
 message(STATUS "Dependencies (libraries and includes)")
-message(STATUS "  \$LAPACK LIBRARIES......${LAPACK_LIBRARY}")
+message(STATUS "  \$LAPACK LIBRARIES......${LAPACK_LIBRARIES}")
 message(STATUS "  \$LAPACK_INCLUDE_DIRS...${LAPACK_INCLUDE_DIRS}")
 
 mark_as_advanced(LAPACK_LIBRARY LAPACK_INCLUDE_DIR)

@@ -5,28 +5,28 @@
           "name": "st",
           "hidden": true,
           "cacheVariables": {
-            "OpenMP": "OFF"
+            "openmp": "OFF"
           }
         },
         {
           "name": "mt",
           "hidden": true,
           "cacheVariables": {
-            "OpenMP": "ON"
+            "openmp": "ON"
           }
         },
         {
             "name": "nonmpi",
             "hidden": true,
             "cacheVariables": {
-              "parallel": "OFF"
+              "MUMPS_parallel": "OFF"
             }
           },
           {
             "name": "mpi",
             "hidden": true,
             "cacheVariables": {
-              "parallel": "ON"
+              "MUMPS_parallel": "ON"
             }
           },        
         {
@@ -63,7 +63,9 @@
           "binaryDir": "${sourceDir}/build/${presetName}",
           "installDir": "${sourceDir}/install/${presetName}",
           "cacheVariables": {
-            "CMAKE_BUILD_TYPE": "Release"         
+            "CMAKE_BUILD_TYPE": "Release",
+            "LAPACK_VENDOR": "AOCL",
+            "SCALAPACK_VENDOR": "AOCL"
           }
         }
     ],

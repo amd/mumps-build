@@ -1,6 +1,6 @@
 # MIT License
 #  
-# Copyright (c) 2021-2022 Advanced Micro Devices, Inc. All rights reserved
+# Copyright (c) 2021-2025 Advanced Micro Devices, Inc. All rights reserved
 #  
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -20,52 +20,47 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+option(MUMPS_BUILD_TESTING "Build tests" ${MUMPS_IS_TOP_LEVEL})
+option(MUMPS_BUILD_SAMPLES "Build Examples" ${MUMPS_IS_TOP_LEVEL})
+
 option(find_static "Find static libraries for Lapack and Scalapack (default shared then static search)")
-
-if(local)
-  get_filename_component(local ${local} ABSOLUTE)
-
-  if(NOT IS_DIRECTORY ${local})
-    message(FATAL_ERROR "Local directory ${local} does not exist")
-  endif()
-endif()
 
 if(MUMPS_UPSTREAM_VERSION VERSION_GREATER_EQUAL 5.2)
   option(gemmt "GEMMT is recommended in User Manual if available" ON)
 endif()
 
+option(MUMPS_parallel "parallel (use MPI)" ON)
 
-option(parallel "parallel (use MPI)" ON)
+option(intsize64 "use 64-bit integers in C and Fortran" ON)
 
-option(intsize64 "use 64-bit integers in C and Fortran" OFF)
-if(intsize64)
-  add_compile_definitions(INTSIZE64
-  $<$<COMPILE_LANG_AND_ID:Fortran,Intel,IntelLLVM>:WORKAROUNDINTELILP64MPI2INTEGER>
-  )
-endif()  
+option(scalapack "Use ScalaPACK to speed up the solution of linear systems" ON)
+if(MUMPS_UPSTREAM_VERSION VERSION_LESS 5.7 AND NOT scalapack)
+  message(FATAL_ERROR "MUMPS version < 5.7 requires scalapack=on")
+endif()
 
-option(scotch "use Scotch orderings " OFF)
+option(scotch "use Scotch orderings" OFF)
 
 option(parmetis "use parallel METIS ordering" OFF)
 option(metis "use sequential METIS ordering" ON)
-if(parmetis AND NOT parallel)
-  message(FATAL_ERROR "parmetis requires parallel=on")
+if(parmetis AND NOT MUMPS_parallel)
+  message(FATAL_ERROR "parmetis requires MUMPS_parallel=on")
 endif()
 
 option(openmp "use OpenMP" ON)
 
 option(matlab "Matlab interface" OFF)
-option(octave "GNU Octave interface" OFF)
-if((matlab OR octave) AND parallel)
-  message(FATAL_ERROR "Matlab / Octave requires parallel=off")
+if(matlab AND MUMPS_parallel)
+  message(FATAL_ERROR "Matlab requires -DMUMPS_parallel=off")
 endif()
 
 option(find "find [SCA]LAPACK" on)
 
-option(BUILD_SHARED_LIBS "Build shared libraries")
+option(CMAKE_BUILD_TYPE "Build configuration" Release)
+option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
 
+include(CheckPIESupported)
+check_pie_supported()
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-
 
 option(BUILD_SINGLE "Build single precision float32 real" OFF)
 option(BUILD_DOUBLE "Build double precision float64 real" ON)
@@ -74,12 +69,11 @@ option(BUILD_COMPLEX16 "Build double precision complex" OFF)
 
 # --- other options
 
-option(CMAKE_TLS_VERIFY "Verify TLS certificates" ON)
-
 set_property(DIRECTORY PROPERTY EP_UPDATE_DISCONNECTED true)
 
 set(FETCHCONTENT_UPDATES_DISCONNECTED true)
 
-if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-  set(CMAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/local" CACHE PATH "default install path" FORCE)
+# this is for convenience of those needing scalapaack, lapack built
+if(MUMPS_IS_TOP_LEVEL AND CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+  set_property(CACHE CMAKE_INSTALL_PREFIX PROPERTY VALUE "${PROJECT_BINARY_DIR}/local")
 endif()

@@ -2,41 +2,32 @@ if(NOT BUILD_DOUBLE)
   message(FATAL_ERROR "Matlab requires real64: `cmake -DBUILD_DOUBLE=true`")
 endif()
 
-if(parallel)
-  message(WARNING "MUMPS MEX assumes no MPI (cmake -Dparallel=no)")
-endif()
-
-if(matlab)
-  find_package(Matlab REQUIRED COMPONENTS MEX_COMPILER MAIN_PROGRAM)
-elseif(octave)
-  find_package(Octave REQUIRED COMPONENTS Development Interpreter)
+if(MUMPS_parallel)
+  message(WARNING "MUMPS MEX assumes no MPI (cmake -DMUMPS_parallel=no)")
 endif()
 
 set(mumps_matlab_path ${mumps_SOURCE_DIR}/MATLAB)
 
 if(matlab)
 
+find_package(Matlab REQUIRED COMPONENTS MEX_COMPILER MAIN_PROGRAM)
+
 matlab_add_mex(NAME dmumpsmex
 SHARED
-SRC ${mumps_SOURCE_DIR}/matlab/mumpsmex.c
+SRC ${mumps_matlab_path}/mumpsmex.c
 LINK_TO MUMPS::MUMPS
 )
 
 add_test(NAME matlabMEX
-COMMAND ${Matlab_MAIN_PROGRAM} -batch "addpath('${PROJECT_BINARY_DIR}', '${mumps_matlab_path}', '${PROJECT_SOURCE_DIR}/matlab'), example"
+COMMAND ${Matlab_MAIN_PROGRAM} -sd ${mumps_matlab_path}
+-batch "addpath('$<TARGET_FILE_DIR:dmumps>'), sparserhs_example"
 )
-
-elseif(octave)
-
-add_library(dmumpsmex SHARED mumpsmex.c)
-target_link_libraries(dmumpsmex PRIVATE MUMPS::MUMPS Octave::Octave)
-set_property(TARGET dmumpsmex PROPERTY SUFFIX .mex)
-set_property(TARGET dmumpsmex PROPERTY PREFIX "")
-
-
-add_test(NAME octaveMEX
-COMMAND ${Octave_EXECUTABLE} --eval "addpath('${PROJECT_BINARY_DIR}', '${mumps_matlab_path}', '${PROJECT_SOURCE_DIR}/matlab'), example"
+set_tests_properties(matlabMEX PROPERTIES
+TIMEOUT 90
+LABELS "matlab"
+PASS_REGULAR_EXPRESSION "SOLUTION OK"
 )
+# sometimes the example succeeds but hangs on cleanup
 
 endif()
 

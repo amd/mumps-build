@@ -7,11 +7,12 @@ FindMUMPS
 
 Finds the MUMPS library.
 Note that MUMPS generally requires SCALAPACK and LAPACK as well.
-PORD is always used, in addition to the optional Scotch + METIS.
+PORD is always used, in addition to the optional Scotch or METIS.
 
 COMPONENTS
   s d c z   list one or more. Default is "s d". s: real32, d: real64, c: complex32, z: complex64
-  Scotch  MUMPS built with Scotch + METIS
+  Scotch  MUMPS built with Scotch
+  METIS   MUMPS build with METIS
   OpenMP  MUMPS build with OpenMP support
 
 Result Variables
@@ -43,7 +44,7 @@ if(NOT OpenMP_FOUND)
   return()
 endif()
 
-list(APPEND CMAKE_REQUIRED_FLAGS ${OpenMP_Fortran_FLAGS} ${OpenMP_C_FLAGS})
+set(CMAKE_REQUIRED_FLAGS "${OpenMP_Fortran_FLAGS} ${OpenMP_C_FLAGS}")
 list(APPEND CMAKE_REQUIRED_INCLUDES ${OpenMP_Fortran_INCLUDE_DIRS} ${OpenMP_C_INCLUDE_DIRS})
 list(APPEND CMAKE_REQUIRED_LIBRARIES ${OpenMP_Fortran_LIBRARIES} ${OpenMP_C_LIBRARIES})
 
@@ -64,31 +65,40 @@ endfunction(mumps_openmp_check)
 
 function(mumps_scotch_check)
 
-# check if Scotch linked
-find_package(Scotch COMPONENTS ESMUMPS)
-# METIS is required when using Scotch
-if(Scotch_FOUND)
-  find_package(METIS)
-endif()
-
-if(NOT METIS_FOUND)
-  return()
-endif()
-
-list(APPEND CMAKE_REQUIRED_INCLUDES ${Scotch_INCLUDE_DIRS} ${METIS_INCLUDE_DIRS})
-list(APPEND CMAKE_REQUIRED_LIBRARIES ${Scotch_LIBRARIES} ${METIS_LIBRARIES})
+list(APPEND CMAKE_REQUIRED_INCLUDES ${Scotch_INCLUDE_DIRS})
+list(APPEND CMAKE_REQUIRED_LIBRARIES ${Scotch_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
 
 check_fortran_source_compiles(
 "program test_scotch
 implicit none
-external :: mumps_scotch
-call mumps_scotch()
+external :: mumps_scotch_version
+integer :: vers
+call mumps_scotch_version(vers)
 end program"
 MUMPS_Scotch_FOUND
 SRC_EXT f90
 )
 
 endfunction(mumps_scotch_check)
+
+
+function(mumps_metis_check)
+
+list(APPEND CMAKE_REQUIRED_INCLUDES ${METIS_INCLUDE_DIRS})
+list(APPEND CMAKE_REQUIRED_LIBRARIES ${METIS_LIBRARIES})
+
+check_fortran_source_compiles(
+"program test_metis
+implicit none
+external :: mumps_metis_idxsize
+integer :: idxsize
+call mumps_metis_idxsize(idxsize)
+end program"
+MUMPS_METIS_FOUND
+SRC_EXT f90
+)
+
+endfunction(mumps_metis_check)
 
 
 function(mumps_check)
@@ -98,21 +108,15 @@ if(NOT (MUMPS_LIBRARY AND MUMPS_INCLUDE_DIR))
   return()
 endif()
 
-if(NOT SCALAPACK_FOUND)
-  find_package(SCALAPACK)
-endif()
+# some OpenMPI builds need -pthread
+find_package(Threads)
 
-if(NOT (MPI_C_FOUND AND MPI_Fortran_FOUND))
-  # factory FindMPI re-searches, slowing down configure, especialy when many subprojects use MPI
-  find_package(MPI COMPONENTS C Fortran)
-endif()
-
-if(NOT LAPACK_FOUND)
-  find_package(LAPACK)
-endif()
-
-set(CMAKE_REQUIRED_INCLUDES ${MUMPS_INCLUDE_DIR} ${SCALAPACK_INCLUDE_DIRS} ${LAPACK_INCLUDE_DIRS} ${MPI_Fortran_INCLUDE_DIRS} ${MPI_C_INCLUDE_DIRS})
-set(CMAKE_REQUIRED_LIBRARIES ${MUMPS_LIBRARY} ${SCALAPACK_LIBRARIES} ${LAPACK_LIBRARIES} ${MPI_Fortran_LIBRARIES} ${MPI_C_LIBRARIES})
+set(CMAKE_REQUIRED_INCLUDES ${MUMPS_INCLUDE_DIR} ${SCALAPACK_INCLUDE_DIRS} ${LAPACK_INCLUDE_DIRS}
+${MPI_Fortran_INCLUDE_DIRS} ${MPI_C_INCLUDE_DIRS}
+)
+set(CMAKE_REQUIRED_LIBRARIES ${MUMPS_LIBRARY} ${SCALAPACK_LIBRARIES} ${LAPACK_LIBRARIES}
+${MPI_Fortran_LIBRARIES} ${MPI_C_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT}
+)
 
 if(OpenMP IN_LIST MUMPS_FIND_COMPONENTS)
   mumps_openmp_check()
@@ -120,6 +124,10 @@ endif()
 
 if(Scotch IN_LIST MUMPS_FIND_COMPONENTS)
   mumps_scotch_check()
+endif()
+
+if(METIS IN_LIST MUMPS_FIND_COMPONENTS)
+  mumps_metis_check()
 endif()
 
 foreach(c IN LISTS MUMPS_FIND_COMPONENTS)
@@ -272,7 +280,7 @@ endfunction(mumps_libs)
 
 # --- main
 
-# need to have at least one arith precision component
+# need to have at least one precision component
 set(mumps_ariths s d c z)
 
 set(mumps_need_default true)

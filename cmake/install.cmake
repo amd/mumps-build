@@ -23,12 +23,6 @@ ${CMAKE_CURRENT_BINARY_DIR}/cmake/${PROJECT_NAME}ConfigVersion.cmake
 DESTINATION cmake
 )
 
-# allow use of package from build directory without installing
-export(EXPORT ${PROJECT_NAME}-targets
-FILE ${CMAKE_CURRENT_BINARY_DIR}/cmake/${PROJECT_NAME}-targets.cmake
-NAMESPACE ${PROJECT_NAME}::
-)
-
 # --- CPack
 
 set(CPACK_GENERATOR "TBZ2")
@@ -38,7 +32,7 @@ set(CPACK_RESOURCE_FILE_README "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
 set(CPACK_PACKAGE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/package)
 
 # not .gitignore as its regex syntax is more advanced than CMake
-set(CPACK_SOURCE_IGNORE_FILES .git/ .github/ .vscode/ _CPack_Packages/
+set(CPACK_SOURCE_IGNORE_FILES .git/ .github/ .vscode/ _CPack_Packages/ .DS_Store
 ${CMAKE_BINARY_DIR}/ ${PROJECT_BINARY_DIR}/
 )
 

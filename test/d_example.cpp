@@ -1,18 +1,16 @@
-/*
- *
- *  This file is part of MUMPS 5.5.1, released
- *  on Tue Jul 12 13:17:24 UTC 2022
- *
- */
+// based on d_example.c from MUMPS 5.5.1
+
 /* Example program using the C interface to the
  * double real arithmetic version of MUMPS, dmumps_c.
  * We solve the system A x = RHS with
  *   A = diag(1 2) and RHS = [1 4]^T
  * Solution is [1 2]^T */
-#include <stdio.h>
-#include <string.h>
+
+#include <iostream>
+
 #include "mpi.h"
 #include "dmumps_c.h"
+
 #define JOB_INIT -1
 #define JOB_END -2
 #define USE_COMM_WORLD -987654
@@ -58,9 +56,11 @@ int main(int argc, char ** argv)
   /* Call the MUMPS package (analyse, factorization and solve). */
   id.job=6;
   dmumps_c(&id);
+
   if (id.infog[0]<0) {
-    printf(" (PROC %d) ERROR RETURN: \tINFOG(1)= %d\n\t\t\t\tINFOG(2)= %d\n",
-        myid, id.infog[0], id.infog[1]);
+    std::cerr << " (PROC " << myid <<
+      ") ERROR RETURN: \tINFOG(1)= " << id.infog[0] <<
+      "\n\t\t\t\tINFOG(2)= " << id.infog[1] << "\n";
     error = 1;
   }
 
@@ -68,11 +68,10 @@ int main(int argc, char ** argv)
   id.job=JOB_END;
   dmumps_c(&id);
   if (myid == 0) {
-    if (!error) {
-      printf("Solution is : (%8.2f  %8.2f)\n", rhs[0],rhs[1]);
-    } else {
-      printf("An error has occured, please check error code returned by MUMPS.\n");
-    }
+    if (!error)
+      std::cout << "Solution is : (" << rhs[0] << "  " << rhs[1] << ")\n";
+    else
+      std::cerr << "An error has occured, please check error code returned by MUMPS.\n";
   }
   ierr = MPI_Finalize();
   return 0;
